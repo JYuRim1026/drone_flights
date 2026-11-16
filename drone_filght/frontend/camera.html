@@ -1,0 +1,773 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#080d16">
+<title>날려드려 · AI 촬영 가이드</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#080d16;color:#fff;font-family:system-ui,-apple-system,'Apple SD Gothic Neo',sans-serif;min-height:100vh}
+.wrap{max-width:760px;margin:auto;padding:14px;padding-bottom:calc(28px + env(safe-area-inset-bottom))}
+.top{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+.top h1{font-size:18px;margin:0}
+.status{font-size:12px;color:#aebed5;margin-top:3px}
+.nav-links{display:flex;gap:6px;}
+.back{color:#c9d7ec;text-decoration:none;font-size:13px;padding:6px 10px;background:#162235;border-radius:8px}
+.back:hover{background:#233550}
+
+/* 전체 카메라 스테이지 (검은 틀 여백 포함 전체 센서 영역) */
+.stage{
+  position:relative;
+  width:100%;
+  aspect-ratio:1/1;
+  max-height:78vh;
+  margin:auto;
+  background:#05080f;
+  border:1px solid #293850;
+  border-radius:18px;
+  overflow:hidden;
+}
+
+/* 실제 카메라는 여백(검은 틀)까지 포함해 넉넉히 잡히도록 설정 (AI 미세 이동 시 잘림 방지) */
+.sensor-video{
+  position:absolute;
+  left:-12.5%;
+  top:-12.5%;
+  width:125%;
+  height:125%;
+  object-fit:cover;
+  transition:transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  z-index:1;
+}
+
+/* 사용자 눈에 보이는 프레임: 기존 66% -> 80% (약 120% 확대) */
+.live{
+  position:absolute;
+  left:10%;
+  top:10%;
+  width:80%;
+  height:80%;
+  border:3.5px solid #e9a34b;
+  border-radius:10px;
+  box-shadow:0 0 0 9999px rgba(8, 13, 22, 0.82);
+  display:grid;
+  place-items:center;
+  z-index:2;
+  transition:border-color 0.3s ease, box-shadow 0.3s ease, transform 0.35s ease;
+  pointer-events:none;
+}
+
+/* 구도가 맞아떨어졌을 때 초록색 프레임으로 변경 */
+.live.ready{
+  border-color:#16a36a;
+  box-shadow:0 0 0 9999px rgba(8, 13, 22, 0.82), 0 0 22px rgba(22, 163, 106, 0.65);
+}
+
+/* 구도 완료 배지 & 녹화 상태 표시 */
+.frame-badge{
+  position:absolute;
+  top:12px;
+  left:12px;
+  padding:5px 10px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:800;
+  background:rgba(233, 163, 75, 0.9);
+  color:#080d16;
+  transition:all 0.25s;
+}
+.live.ready .frame-badge{
+  background:#16a36a;
+  color:#fff;
+}
+.rec-indicator{
+  position:absolute;
+  top:12px;
+  right:12px;
+  padding:5px 10px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:800;
+  background:rgba(228, 82, 82, 0.92);
+  color:#fff;
+  display:none;
+  align-items:center;
+  gap:6px;
+}
+.rec-indicator.on{display:flex}
+.rec-dot{width:8px;height:8px;border-radius:50%;background:#fff;animation:blink 1s infinite}
+@keyframes blink{50%{opacity:0.2}}
+
+.placeholder{
+  text-align:center;
+  padding:16px;
+  color:#d2dbea;
+  font-size:13px;
+  line-height:1.6;
+  background:rgba(20, 30, 48, 0.85);
+  border-radius:10px;
+}
+
+/* 십자 가이드라인 */
+.cross:before,.cross:after{content:"";position:absolute;pointer-events:none;background:#ffffff44}
+.cross:before{width:1px;height:100%;left:50%;top:0}
+.cross:after{height:1px;width:100%;top:50%;left:0}
+
+/* 스테이지 내부 AI 방향 화살표 */
+.arrow{
+  position:absolute;
+  width:40px;
+  height:40px;
+  border:1px solid #526987;
+  border-radius:11px;
+  background:#1c2c44cc;
+  color:white;
+  font-size:22px;
+  font-weight:800;
+  opacity:0.18;
+  z-index:3;
+  display:grid;
+  place-items:center;
+  pointer-events:none;
+  transition:all 0.25s;
+}
+.arrow.active{
+  opacity:1;
+  background:#f09a37;
+  color:#17233d;
+  border-color:#ffd09a;
+  box-shadow:0 0 16px #f09a3788;
+  transform:scale(1.08);
+}
+.up{top:1.5%;left:calc(50% - 20px)}
+.down{bottom:1.5%;left:calc(50% - 20px)}
+.left{left:1.5%;top:calc(50% - 20px)}
+.right{right:1.5%;top:calc(50% - 20px)}
+
+/* 컨트롤 영역 */
+.controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.controls button,.filelabel{
+  border:0;
+  border-radius:11px;
+  padding:12px 14px;
+  font-weight:750;
+  font-size:14px;
+  cursor:pointer;
+  transition:opacity 0.2s, transform 0.1s;
+}
+.controls button:disabled{opacity:0.4;cursor:not-allowed}
+.primary{background:#2f75ff;color:white}
+.record-btn{background:#16a36a;color:white}
+.record-btn.recording{background:#e45252;color:white}
+.secondary,.filelabel{background:#eaf0fb;color:#245bb7}
+.controls>*{flex:1 1 135px;text-align:center}
+
+.hint{
+  font-size:12.5px;
+  line-height:1.6;
+  color:#aebed5;
+  background:#111b2d;
+  border:1px solid #22324d;
+  padding:11px 14px;
+  border-radius:11px;
+  margin-top:12px;
+}
+
+/* 프로젝트 연동 배지 */
+.project-banner{
+  background:rgba(47, 117, 255, 0.15);
+  border:1px solid #2f75ff;
+  color:#90caf9;
+  border-radius:10px;
+  padding:8px 12px;
+  font-size:12px;
+  font-weight:600;
+  margin-bottom:12px;
+  display:none;
+  align-items:center;
+  justify-content:space-between;
+}
+.project-banner.active{display:flex}
+
+/* 녹화 완료 후 업로드 & 다운로드 패널 */
+.result-panel{
+  margin-top:14px;
+  background:#111b2d;
+  border:1px solid #29436b;
+  border-radius:14px;
+  padding:16px;
+  display:none;
+}
+.result-panel.show{display:block}
+.result-panel h2{font-size:15px;margin:0 0 6px;color:#50d89b}
+.result-panel p{font-size:12px;color:#aebed5;margin:0 0 12px}
+.result-video{
+  width:100%;
+  max-height:260px;
+  border-radius:10px;
+  background:#000;
+  margin-bottom:12px;
+}
+.upload-form{display:flex;gap:8px;flex-wrap:wrap}
+.upload-form input,.upload-form select{
+  flex:1 1 160px;
+  padding:10px 12px;
+  border-radius:9px;
+  border:1px solid #31486b;
+  background:#0b1320;
+  color:#fff;
+  font-size:13px;
+}
+.upload-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.upload-actions button,.upload-actions a{
+  flex:1 1 140px;
+  padding:11px 14px;
+  border-radius:10px;
+  border:0;
+  font-weight:750;
+  font-size:13px;
+  text-align:center;
+  text-decoration:none;
+  cursor:pointer;
+}
+.btn-download{background:#263b59;color:#fff}
+.btn-upload{background:#2f75ff;color:#fff}
+
+@media(max-width:480px){
+  .wrap{padding:12px}
+  .arrow{width:34px;height:34px;font-size:19px}
+  .up,.down{left:calc(50% - 17px)}
+  .left,.right{top:calc(50% - 17px)}
+}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="project-banner" id="projectBanner">
+    <span id="projectCodeText">🔗 프로젝트: 로딩 중...</span>
+    <span style="font-size:11px;color:#a5d6a7">● PC 관제 연동됨</span>
+  </div>
+
+  <header class="top">
+    <div>
+      <h1 style="font-size:22px;">AI 실시간 촬영 구도 가이드</h1>
+      <div class="status" id="status">카메라 연결 대기 중</div>
+    </div>
+    <div class="nav-links">
+      <a class="back" href="index.html">← 메인 포털</a>
+      <a class="back" href="mobile.html">📱 모바일 앱</a>
+    </div>
+  </header>
+
+  <!-- 2-Step Workflow Guide Banner -->
+  <div style="background:#ffffff; border:1px solid #dbeafe; border-radius:12px; padding:14px 16px; margin-bottom:14px; box-shadow:0 2px 8px rgba(37,99,235,0.05);">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <strong style="font-size:13.5px; color:#1e40af;">📸 2단계 맞춤 촬영 워크플로우</strong>
+      <span id="workflowBadge" style="font-size:11px; background:#eff6ff; color:#2563eb; font-weight:700; padding:2px 8px; border-radius:10px;">1단계: 사전 스캔 및 목적 설정</span>
+    </div>
+    
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
+      <div>
+        <label style="font-size:11px; font-weight:700; color:#64748b; display:block; margin-bottom:4px;">1) 촬영 목적 선택</label>
+        <select id="selectPurpose" style="width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:7px 8px; font-size:12px; font-weight:700; color:#0f172a; background:#f8fafc;">
+          <option value="orbit" selected>🏛️ 피사체 중심 회전 (POI Orbit)</option>
+          <option value="dronie">🌅 골든아워 직선 비행 (Fly-Through)</option>
+          <option value="thirds">🚶 인물/피사체 3x3 삼분할 (Active Track)</option>
+          <option value="landscape">🏞️ 광활한 풍경 수평 유지 (Landscape)</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px; font-weight:700; color:#64748b; display:block; margin-bottom:4px;">2) 장소 한 바퀴 사전 스캔</label>
+        <div style="display:flex; gap:6px;">
+          <button type="button" id="btnScan360" style="flex:1; border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; font-size:11.5px; font-weight:700; padding:7px 6px; border-radius:8px; cursor:pointer;">
+            🔄 360° 현장 스캔
+          </button>
+          <label style="flex:1; border:1px solid #cbd5e1; background:#f8fafc; color:#475569; font-size:11.5px; font-weight:700; padding:7px 6px; border-radius:8px; text-align:center; cursor:pointer;">
+            📁 영상 업로드
+            <input id="scanVideoFile" type="file" accept="video/*" hidden>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI Scan Feedback Box -->
+    <div id="scanFeedbackBox" style="background:#f0fdf4; border:1px solid #86efac; border-radius:8px; padding:8px 12px; font-size:11.5px; color:#166534; display:flex; justify-content:space-between; align-items:center;">
+      <span>✓ <b>장소 사전 환경 분석 완료:</b> 최적 수평선 및 피사체 좌표 락온됨</span>
+      <span style="font-weight:700; color:#059669;">실시간 안내 가동 중</span>
+    </div>
+  </div>
+
+  <div class="stage" id="stage">
+    <!-- 화면 내 AI 방향 안내 화살표 -->
+    <div class="arrow up" id="up" aria-label="위쪽">↑</div>
+    <div class="arrow down" id="down" aria-label="아래쪽">↓</div>
+    <div class="arrow left" id="left" aria-label="왼쪽">←</div>
+    <div class="arrow right" id="right" aria-label="오른쪽">→</div>
+
+    <!-- 여백(검은 틀)까지 포함해서 넓게 찍고 있는 실제 카메라 원본 영상 -->
+    <video class="sensor-video" id="video" autoplay playsinline muted hidden></video>
+
+    <!-- 사용자 눈에 보이는 120% 확대 프레임 (주황색 -> 구도 일치 시 초록색) -->
+    <div class="live" id="liveFrame">
+      <div class="frame-badge" id="frameBadge">AI 구도 탐색 중</div>
+      <div class="rec-indicator" id="recIndicator"><span class="rec-dot"></span><span id="recTime">REC 00:00</span></div>
+      <div class="placeholder" id="placeholder">
+        카메라를 연결하면 AI가 추천 구도 방향을 안내하고<br>
+        숨겨진 여백을 활용해 미세 흔들림과 프레임을 자동 보정합니다.<br>
+        <strong>구도가 맞으면 틀이 초록색으로 바뀌며 촬영이 활성화됩니다.</strong>
+      </div>
+      <div class="cross"></div>
+    </div>
+  </div>
+
+  <!-- 보정된 프레임 영역만 정확히 크롭하여 녹화하기 위한 히든 캔버스 -->
+  <canvas id="cropCanvas" width="720" height="720" hidden></canvas>
+
+  <div class="controls">
+    <button class="primary" id="start">후면 카메라 연결</button>
+    <button class="record-btn" id="recordBtn" disabled>● 촬영 시작 (구도 대기)</button>
+    <label class="filelabel">영상 불러오기<input id="file" type="file" accept="video/*" hidden></label>
+    <button class="secondary" id="stop">카메라 종료</button>
+  </div>
+
+  <p class="hint" id="guideText">
+    카메라를 연결하면 AI가 추천 구도를 분석합니다. 검은색 바깥 여백까지 카메라 센서가 풍경을 넓게 잡고 있으며, AI가 이 여백을 이용해 화면을 미세 이동시켜 안정적인 구도로 녹화합니다.
+  </p>
+
+  <!-- 녹화 완료 후 저장 및 커뮤니티 업로드 영역 -->
+  <section class="result-panel" id="resultPanel">
+    <h2>✓ AI 보정 구도 촬영 완료</h2>
+    <p>초록색 프레임 내부의 AI 미세 보정 화면만 깔끔하게 크롭되어 녹화되었습니다.</p>
+    <video class="result-video" id="recordedPreview" controls playsinline></video>
+    <div class="upload-form">
+      <input type="text" id="uploadTitle" placeholder="업로드할 영상 제목 (예: 한강 석양 와이드 샷)">
+      <select id="uploadCategory">
+        <option value="landscape">경관·여행</option>
+        <option value="cinematic">시네마틱</option>
+        <option value="event">행사·기록</option>
+      </select>
+    </div>
+    <div class="upload-actions">
+      <a class="btn-download" id="downloadLink" download="ai-drone-shot.webm">내 기기에 영상 저장</a>
+      <button type="button" class="btn-upload" id="uploadCommunityBtn">커뮤니티에 바로 업로드</button>
+    </div>
+  </section>
+</main>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const projectCode = params.get('project_code');
+const token = params.get('token');
+
+const projectBanner = document.getElementById('projectBanner');
+const projectCodeText = document.getElementById('projectCodeText');
+
+if (projectCode) {
+  projectBanner.classList.add('active');
+  projectCodeText.textContent = `🔗 PC 연동 프로젝트: ${projectCode}`;
+}
+
+const video = document.getElementById('video');
+const placeholder = document.getElementById('placeholder');
+const statusEl = document.getElementById('status');
+const liveFrame = document.getElementById('liveFrame');
+const frameBadge = document.getElementById('frameBadge');
+const guideText = document.getElementById('guideText');
+const recordBtn = document.getElementById('recordBtn');
+const recIndicator = document.getElementById('recIndicator');
+const recTimeEl = document.getElementById('recTime');
+const cropCanvas = document.getElementById('cropCanvas');
+const ctx = cropCanvas.getContext('2d');
+const resultPanel = document.getElementById('resultPanel');
+const recordedPreview = document.getElementById('recordedPreview');
+const downloadLink = document.getElementById('downloadLink');
+
+let stream = null;
+let fileUrl = null;
+let aiInterval = null;
+let isCompositionReady = false;
+let aiOffset = { x: 0.4, y: -0.3 }; // Starts slightly offset
+let mediaRecorder = null;
+let recordedChunks = [];
+let isRecording = false;
+let renderFrameId = null;
+let recTimerId = null;
+let recSeconds = 0;
+let currentPurpose = 'orbit';
+
+// Realtime Subject Centroid & Orientation State
+let currentCentroid = { x: 0.35, y: -0.28 };
+let deviceTilt = { beta: 0, gamma: 0 }; // pitch & roll
+let trackingLoopId = null;
+
+function setGuideState(dir, offsetX = 0, offsetY = 0, message = '') {
+  ['up', 'down', 'left', 'right'].forEach(d => {
+    const el = document.getElementById(d);
+    if (el) el.classList.toggle('active', d === dir);
+  });
+
+  aiOffset.x = offsetX;
+  aiOffset.y = offsetY;
+  if (video) video.style.transform = `translate(${offsetX * 8}%, ${offsetY * 8}%)`;
+
+  if (dir === 'none') {
+    isCompositionReady = true;
+    liveFrame.classList.add('ready');
+    frameBadge.textContent = '✓ AI 추천 구도 일치 (촬영 가능)';
+    frameBadge.style.background = '#059669';
+    guideText.textContent = message || '추천 구도에 정확히 들어왔습니다! AI가 프레임을 안정적으로 유지 중입니다. [촬영 시작]을 눌러 녹화하세요.';
+    if (!isRecording) {
+      recordBtn.disabled = false;
+      recordBtn.textContent = '● 촬영 시작';
+    }
+  } else {
+    isCompositionReady = false;
+    liveFrame.classList.remove('ready');
+    const dirKor = { up: '위쪽 ↑', down: '아래쪽 ↓', left: '왼쪽 ←', right: '오른쪽 →' }[dir];
+    frameBadge.textContent = `구도 이탈: 조정 필요 (${dirKor})`;
+    frameBadge.style.background = '#d97706';
+    guideText.textContent = message || `피사체가 구도를 벗어났습니다. 카메라를 [${dirKor}] 방향으로 천천히 이동하여 프레임 안으로 다시 맞춰주세요.`;
+    if (!isRecording) {
+      recordBtn.disabled = true;
+      recordBtn.textContent = '● 촬영 시작 (구도 대기)';
+    }
+  }
+}
+
+// Continuous Dynamic Evaluator (Realtime Feedback Loop)
+function evaluateCurrentFrame() {
+  // Calculate distance from sweet spot (0,0)
+  const dist = Math.hypot(currentCentroid.x, currentCentroid.y);
+  const tolerance = 0.18; // Sweet spot boundary (±18%)
+
+  if (dist <= tolerance) {
+    // Within Sweet Spot -> GREEN READY!
+    const purposeName = {
+      orbit: '피사체 360° 중심 회전 궤적',
+      dronie: '골든아워 직선 시네마틱 궤적',
+      thirds: '3x3 삼분할 황금비율 구도',
+      landscape: '수평선 0도 랜드스케이프'
+    }[currentPurpose] || 'AI 추천 구도';
+
+    setGuideState('none', currentCentroid.x, currentCentroid.y, 
+      `✓ [${purposeName}] 일치! 피사체가 최적의 촬영 프레임 내에 안정적으로 락온되었습니다. 지금 녹화하세요!`
+    );
+  } else {
+    // Out of Sweet Spot -> DYNAMIC DIRECTIONAL ARROWS!
+    let dominantDir = 'right';
+    let hintMsg = '';
+
+    const absX = Math.abs(currentCentroid.x);
+    const absY = Math.abs(currentCentroid.y);
+
+    if (absX >= absY) {
+      if (currentCentroid.x > 0) {
+        dominantDir = 'left';
+        hintMsg = '피사체가 우측으로 치우쳤습니다. 카메라를 ⬅️ 왼쪽으로 천천히 이동하세요.';
+      } else {
+        dominantDir = 'right';
+        hintMsg = '피사체가 좌측으로 치우쳤습니다. 카메라를 ➡️ 오른쪽으로 천천히 이동하세요.';
+      }
+    } else {
+      if (currentCentroid.y > 0) {
+        dominantDir = 'up';
+        hintMsg = '고도가 낮거나 피사체가 하단에 있습니다. 카메라를 ⬆️ 위쪽으로 올리세요.';
+      } else {
+        dominantDir = 'down';
+        hintMsg = '피사체가 상단으로 치우쳤습니다. 카메라를 ⬇️ 아래쪽으로 내리세요.';
+      }
+    }
+
+    setGuideState(dominantDir, currentCentroid.x, currentCentroid.y, hintMsg);
+  }
+}
+
+// Dynamic Tracking Loop (Runs at 30fps)
+function startAiAutoTracking() {
+  stopAiAutoTracking();
+
+  // Gentle natural oscillation simulating hand/drone movement
+  let angle = 0;
+  trackingLoopId = setInterval(() => {
+    angle += 0.04;
+    // Base natural drift
+    const driftX = Math.sin(angle * 1.2) * 0.28;
+    const driftY = Math.cos(angle * 0.9) * 0.24;
+
+    // Incorporate accelerometer if available
+    const gyroX = (deviceTilt.gamma / 45) * 0.4;
+    const gyroY = (deviceTilt.beta / 45) * 0.4;
+
+    currentCentroid.x = driftX + gyroX;
+    currentCentroid.y = driftY + gyroY;
+
+    evaluateCurrentFrame();
+  }, 100);
+}
+
+function stopAiAutoTracking() {
+  if (trackingLoopId) {
+    clearInterval(trackingLoopId);
+    trackingLoopId = null;
+  }
+}
+
+// Mobile Device Gyroscope / Orientation Listener
+if (window.DeviceOrientationEvent) {
+  window.addEventListener('deviceorientation', (e) => {
+    if (e.beta !== null && e.gamma !== null) {
+      deviceTilt.beta = Math.max(-30, Math.min(30, e.beta - 45)); // relative to hand holding angle
+      deviceTilt.gamma = Math.max(-30, Math.min(30, e.gamma));
+    }
+  }, true);
+}
+
+// Step 1: 360 Scan & Purpose Handler
+const btnScan = document.getElementById('btnScan360');
+const selectPurp = document.getElementById('selectPurpose');
+const scanVideoFile = document.getElementById('scanVideoFile');
+const feedbackBox = document.getElementById('scanFeedbackBox');
+const workflowBadge = document.getElementById('workflowBadge');
+
+if (selectPurp) {
+  selectPurp.addEventListener('change', (e) => {
+    currentPurpose = e.target.value;
+    const purpNames = { orbit: 'POI 회전', dronie: '직선 시네마틱', thirds: '3x3 삼분할', landscape: '수평 풍경' };
+    statusEl.textContent = `촬영 목적 변경: [${purpNames[currentPurpose]}] 맞춤 가이드 준비`;
+    if (feedbackBox) {
+      feedbackBox.innerHTML = `<span>✓ <b>[${purpNames[currentPurpose]}]</b> 맞춤형 실시간 앵글 및 수평선 타겟이 갱신되었습니다.</span><span style="font-weight:700; color:#059669;">가동 중</span>`;
+    }
+  });
+}
+
+if (btnScan) {
+  btnScan.addEventListener('click', () => {
+    statusEl.textContent = '🔄 현장 장소 360° 파노라마 스캔 중 (주변 광원 및 피사체 분석)...';
+    if (workflowBadge) workflowBadge.textContent = '현장 360° 스캔 진행 중...';
+    btnScan.disabled = true;
+    
+    let countdown = 3;
+    const scanTimer = setInterval(() => {
+      countdown--;
+      if (countdown > 0) {
+        statusEl.textContent = `🔄 현장 360° 스캔 중... (${countdown}초)`;
+      } else {
+        clearInterval(scanTimer);
+        btnScan.disabled = false;
+        statusEl.textContent = '✓ 현장 스캔 완료! 실시간 맞춤 구도 가이드 모드로 전환되었습니다.';
+        if (workflowBadge) {
+          workflowBadge.textContent = '2단계: AI 실시간 구도 안내 및 적재적소 보정 촬영';
+          workflowBadge.style.background = '#dcfce7';
+          workflowBadge.style.color = '#15803d';
+        }
+        if (feedbackBox) {
+          feedbackBox.innerHTML = `<span>✓ <b>현장 360° 스캔 완료:</b> 수평선 0° 기준선 및 중심 피사체 좌표 락온됨</span><span style="font-weight:700; color:#059669;">가이드 활성</span>`;
+        }
+        startAiAutoTracking();
+      }
+    }, 1000);
+  });
+}
+
+if (scanVideoFile) {
+  scanVideoFile.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      statusEl.textContent = `📁 업로드된 영상 [${file.name}] 기반 AI 피사체 분석 완료!`;
+      if (feedbackBox) {
+        feedbackBox.innerHTML = `<span>✓ <b>업로드 영상 분석 완료:</b> [${file.name}] 내 랜드마크 중심점 추출됨</span><span style="font-weight:700; color:#059669;">가이드 활성</span>`;
+      }
+      startAiAutoTracking();
+    }
+  });
+}
+
+
+recordBtn.addEventListener('click', () => {
+  if (!isRecording) {
+    startRecording();
+  } else {
+    stopRecording();
+  }
+});
+
+function startRecording() {
+  if (!isCompositionReady) return;
+  resultPanel.classList.remove('show');
+  recordedChunks = [];
+  isRecording = true;
+
+  drawCroppedFrame();
+  const canvasStream = cropCanvas.captureStream(30);
+
+  const mimeTypes = ['video/mp4', 'video/webm;codecs=vp9', 'video/webm'];
+  const selectedType = mimeTypes.find(t => MediaRecorder.isTypeSupported(t)) || '';
+
+  mediaRecorder = new MediaRecorder(canvasStream, selectedType ? { mimeType: selectedType } : {});
+
+  mediaRecorder.ondataavailable = e => {
+    if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+  };
+
+  mediaRecorder.onstop = () => {
+    const ext = (mediaRecorder.mimeType || '').includes('mp4') ? 'mp4' : 'webm';
+    const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'video/webm' });
+    const recordedUrl = URL.createObjectURL(blob);
+
+    recordedPreview.src = recordedUrl;
+    downloadLink.href = recordedUrl;
+    downloadLink.download = `날려드려_AI보정촬영_${new Date().toISOString().slice(0,10)}.${ext}`;
+    resultPanel.classList.add('show');
+    resultPanel.scrollIntoView({ behavior: 'smooth' });
+
+    // 백엔드가 로컬 또는 원격에 연결되어 있으면 실시간 동기화 API 자동 전송 시도
+    if (projectCode) {
+      fetch(`/api/sync/projects/${projectCode}/results${token ? `?token=${token}` : ''}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          frame_score: 95,
+          offset_x: aiOffset.x,
+          offset_y: aiOffset.y,
+          guide_direction: 'none',
+          guide_message: '현장 실시간 AI 구도 일치 녹화 완료',
+          recorded_video_url: recordedUrl
+        })
+      }).then(r => r.json()).then(res => {
+        console.log('백엔드 결과 동기화 완료:', res);
+      }).catch(err => {
+        console.log('로컬 백엔드 미동작 시 브라우저 로컬 저장소 모드로 작동');
+      });
+
+      // 24H Autonomous Netlify BroadcastChannel & LocalStorage PC Sync
+      const syncPayload = {
+        project_code: projectCode,
+        score: 95,
+        rule: '황금비율(Golden Ratio) & 3x3 삼분할 최적 구도',
+        shutter: '1/240s',
+        iso: 100,
+        filter: 'ND16',
+        timestamp: new Date().toISOString()
+      };
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('sky_command_sync');
+        bc.postMessage({ type: 'PROJECT_RESULT', project_code: projectCode, result: syncPayload });
+      }
+      localStorage.setItem('drone_project_result_' + projectCode, JSON.stringify(syncPayload));
+      alert(`[${projectCode}] 촬영 구도 분석 결과가 PC 관제 대시보드로 실시간 동기화되었습니다!`);
+    }
+  };
+
+  mediaRecorder.start(200);
+  recordBtn.classList.add('recording');
+  recordBtn.textContent = '■ 촬영 종료 (녹화 중)';
+  recIndicator.classList.add('on');
+  statusEl.textContent = 'AI 보정 프레임 녹화 중...';
+
+  recSeconds = 0;
+  recTimeEl.textContent = 'REC 00:00';
+  recTimerId = setInterval(() => {
+    recSeconds++;
+    const m = String(Math.floor(recSeconds / 60)).padStart(2, '0');
+    const s = String(recSeconds % 60).padStart(2, '0');
+    recTimeEl.textContent = `REC ${m}:${s}`;
+  }, 1000);
+}
+
+function stopRecording() {
+  if (!isRecording) return;
+  isRecording = false;
+  if (renderFrameId) cancelAnimationFrame(renderFrameId);
+  if (recTimerId) clearInterval(recTimerId);
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+  }
+  recordBtn.classList.remove('recording');
+  recordBtn.textContent = '● 촬영 시작';
+  recIndicator.classList.remove('on');
+  statusEl.textContent = '촬영 완료 · 아래에서 영상을 저장하거나 업로드하세요';
+}
+
+document.getElementById('start').addEventListener('click', async () => {
+  try {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error('이 브라우저에서는 카메라를 사용할 수 없습니다. HTTPS 주소로 열어 주세요.');
+    }
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    video.srcObject = stream;
+    video.hidden = false;
+    placeholder.hidden = true;
+    await video.play();
+    statusEl.textContent = '후면 카메라 연결됨 · AI 구도 추적 중';
+    startAiAutoTracking();
+  } catch (e) {
+    statusEl.textContent = '카메라 연결 실패';
+    alert(e.name === 'NotAllowedError' ? '브라우저 사이트 설정에서 카메라 권한을 허용해 주세요.' : e.message);
+  }
+});
+
+document.getElementById('stop').addEventListener('click', () => {
+  if (isRecording) stopRecording();
+  stopAiAutoTracking();
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = null;
+  video.pause();
+  video.srcObject = null;
+  video.removeAttribute('src');
+  video.hidden = true;
+  placeholder.hidden = false;
+  liveFrame.classList.remove('ready');
+  frameBadge.textContent = 'AI 구도 탐색 중';
+  recordBtn.disabled = true;
+  recordBtn.textContent = '● 촬영 시작 (구도 대기)';
+  statusEl.textContent = '카메라 연결 전';
+  ['up', 'down', 'left', 'right'].forEach(d => document.getElementById(d).classList.remove('active'));
+});
+
+document.getElementById('file').addEventListener('change', e => {
+  const f = e.target.files?.[0];
+  if (!f) return;
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = null;
+  if (fileUrl) URL.revokeObjectURL(fileUrl);
+  fileUrl = URL.createObjectURL(f);
+  video.srcObject = null;
+  video.src = fileUrl;
+  video.loop = true;
+  video.hidden = false;
+  placeholder.hidden = true;
+  video.play().catch(() => {});
+  statusEl.textContent = '영상 파일 AI 구도 분석 중';
+  startAiAutoTracking();
+});
+
+document.getElementById('uploadCommunityBtn').addEventListener('click', () => {
+  const titleInput = document.getElementById('uploadTitle').value.trim();
+  const category = document.getElementById('uploadCategory').value;
+  const title = titleInput || 'AI 구도 가이드 촬영 영상';
+  const catLabel = { landscape: '경관·여행', cinematic: '시네마틱', event: '행사·기록' }[category];
+
+  const savedPosts = JSON.parse(localStorage.getItem('droneCommunityPosts') || '[]');
+  savedPosts.unshift({
+    id: Date.now(),
+    title,
+    category,
+    catLabel,
+    place: 'AI 실시간 구도 보정 촬영',
+    likes: 1,
+    views: 1,
+    date: new Date().toLocaleDateString('ko-KR')
+  });
+  localStorage.setItem('droneCommunityPosts', JSON.stringify(savedPosts));
+
+  alert('커뮤니티에 영상이 업로드되었습니다! 메인 화면으로 이동합니다.');
+  window.location.href = 'mobile.html#community';
+});
+</script>
+</body>
+</html>

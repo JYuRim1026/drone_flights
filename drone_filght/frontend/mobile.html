@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>날려드려 · 모바일 촬영 도우미</title>
+<style>
+:root{--navy:#10254b;--blue:#2f75ff;--bg:#f5f7fb;--ink:#17233d;--muted:#6b778c;--line:#e3e8f1;--green:#16a36a;--orange:#ff8b3d}*{box-sizing:border-box}html,body{margin:0;padding:0;min-height:100vh;background:#f5f7fb;color:var(--ink);font-family:system-ui,'Apple SD Gothic Neo',sans-serif;overflow-x:hidden}button,input,select,textarea{font:inherit}button{border:0;cursor:pointer}.app{display:flex;min-height:100vh}.side{position:fixed;inset:0 auto 0 0;width:248px;background:linear-gradient(180deg,#10254b,#0b1b38);color:#dce7ff;padding:24px 17px;z-index:5}.brand{display:flex;align-items:center;gap:9px;color:#fff;font-weight:800;font-size:18px;margin:0 9px 30px}.mark{display:grid;place-items:center;width:34px;height:34px;border-radius:11px;background:linear-gradient(135deg,#55a5ff,#8c6cff)}.nav-title{font-size:11px;color:#91a8cf;margin:18px 12px 8px}.nav{display:flex;flex-direction:column}.nav button{width:100%;padding:12px;border-radius:10px;background:transparent;color:#dce7ff;text-align:left;margin:2px 0;touch-action:manipulation;-webkit-tap-highlight-color:transparent;pointer-events:auto;position:relative;z-index:2}.nav button:hover,.nav button.active{background:#244b8f;color:white}.nav span{display:inline-block;width:25px}.side-note{position:absolute;left:25px;right:22px;bottom:22px;color:#91a8cf;font-size:11px;line-height:1.6}.main{margin-left:248px;width:calc(100% - 248px);padding:30px 38px 60px;max-width:1500px}.top{display:flex;justify-content:space-between;gap:20px;margin-bottom:22px}.eyebrow{color:var(--blue);font-size:12px;font-weight:800}.top h1{font-size:30px;letter-spacing:-.05em;margin:7px 0}.top p{margin:0;color:var(--muted);font-size:14px}.top-right{display:flex;gap:8px;align-items:center}.status{background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 13px;color:var(--green);font-size:12px;font-weight:700;white-space:nowrap;height:max-content}.switch-btn{background:#eaf2ff;border:1px solid #c9dcff;color:#245bb7;padding:10px 14px;border-radius:12px;text-decoration:none;font-size:12px;font-weight:750;display:flex;align-items:center;gap:6px}.switch-btn:hover{background:#d5e5ff}.grid{display:grid;grid-template-columns:1.08fr .92fr;gap:18px}.card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:21px;box-shadow:0 7px 24px #10254b09}.card h2{font-size:18px;margin:0 0 6px}.sub{font-size:12px;color:var(--muted);margin:0 0 18px}.hidden{display:none}.chips{display:flex;gap:8px;flex-wrap:wrap}.chip{padding:7px 10px;background:#edf3ff;color:#3267cf;border-radius:999px;font-size:12px;font-weight:700}.application{display:flex;align-items:center;justify-content:space-between;gap:14px;border:1px solid #dce6f7;background:#f7faff;border-radius:14px;padding:16px;margin-bottom:12px;cursor:pointer}.application:hover{border-color:#80aaff;background:#f0f6ff}.application h3{margin:0 0 5px;font-size:15px}.application p{margin:0;color:var(--muted);font-size:12px}.badge{font-size:11px;padding:6px 9px;border-radius:999px;background:#e5f8ef;color:#087e50;white-space:nowrap}.arrow{font-size:20px;color:#8aa0c5}.selected{border:2px solid var(--blue);background:#f4f8ff}.detail{border-left:4px solid var(--blue);background:#f8fbff;border-radius:0 12px 12px 0;padding:14px;margin-top:16px;font-size:13px;line-height:1.7}.detail b{display:inline-block;width:95px}.score{display:flex;align-items:center;gap:17px;background:#f8fbff;border-radius:14px;padding:15px;margin:15px 0}.ring{display:grid;place-items:center;width:78px;height:78px;border-radius:50%;background:conic-gradient(var(--blue) 0 82%,#dce8ff 82%);position:relative}.ring:after{content:'';position:absolute;width:62px;height:62px;border-radius:50%;background:white}.ring b{position:relative;z-index:1}.score strong{display:block;font-size:15px}.score small{color:var(--muted);line-height:1.5}.recommend{border-left:4px solid var(--orange);background:#fff8f1;padding:13px 14px;border-radius:0 12px 12px 0;font-size:13px;line-height:1.65}.timeline{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin:15px 0}.time{padding:10px 5px;text-align:center;border-radius:10px;background:#f5f7fb;color:#778196;font-size:11px}.time b{display:block;margin-bottom:7px}.time.good{background:#e9f8f1;border:1px solid #bcebd5;color:#087e50}.metric{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid #eef1f6;font-size:13px}.metric:last-child{border:0}.green{color:var(--green);font-weight:800}.map{height:280px;border-radius:14px;background:#dcebd8;position:relative;overflow:hidden;background-image:linear-gradient(28deg,transparent 47%,#ffffffaa 48%,#ffffffaa 51%,transparent 52%),linear-gradient(115deg,transparent 47%,#ffffff99 48%,#ffffff99 51%,transparent 52%);background-size:100px 95px,140px 110px}.map:before{content:'촬영 예정지 · 시뮬레이션 지도';position:absolute;top:14px;left:15px;background:#fff;padding:7px 10px;border-radius:8px;font-size:11px;color:#58657b}.route{position:absolute;left:18%;bottom:23%;width:64%;height:45%;border:3px dashed var(--blue);border-color:var(--blue) transparent transparent var(--blue);border-radius:50%;transform:rotate(-17deg)}.point{position:absolute;width:14px;height:14px;border-radius:50%;background:#ff6b5e;border:3px solid #fff}.p1{left:22%;bottom:23%}.p2{left:49%;top:30%}.p3{right:20%;bottom:29%}.legend{font-size:11px;color:var(--muted);margin-top:9px}.legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px}.guide{background:#10254b;color:#fff;border-radius:16px;padding:20px;min-height:235px}.frame{height:132px;width:210px;border:2px solid #50d89b;margin:18px auto 12px;display:grid;place-items:center;color:#50d89b;text-align:center}.guide p{text-align:center;color:#c8d7f4;font-size:12px}.actions{display:flex;justify-content:flex-end;margin-top:16px;gap:8px}.primary,.secondary{border-radius:10px;padding:11px 15px;font-weight:800}.primary{background:var(--blue);color:#fff}.secondary{background:#edf3ff;color:#2863d0}.camera-box{background:#101d37;border-radius:15px;padding:16px;color:white;min-height:270px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center}.camera-preview{width:100%;height:180px;border:2px dashed #50d89b;border-radius:12px;display:grid;place-items:center;color:#b8c9e9;background:linear-gradient(135deg,#162c50,#0d1830)}video{width:100%;height:100%;object-fit:cover;border-radius:10px}.camera-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;justify-content:center}.connection{display:flex;align-items:center;gap:8px;font-size:12px;color:#a8bbdb;margin-bottom:12px}.dot{width:9px;height:9px;border-radius:50%;background:#e45252}.connected .dot{background:#50d89b}.toast{position:fixed;right:25px;bottom:25px;background:#14213d;color:#fff;padding:13px 16px;border-radius:10px;display:none;font-size:13px;z-index:20}
+@media(max-width:800px){.side{position:static;width:100%;height:auto;padding:15px}.app{display:block}.brand{margin-bottom:15px}.nav-title,.side-note{display:none}.nav{display:flex;flex-direction:row;gap:5px;overflow-x:auto;overflow-y:hidden;white-space:nowrap;touch-action:pan-x;-webkit-overflow-scrolling:touch;scrollbar-width:thin;padding:2px 0 7px}.nav button{flex:0 0 auto;width:auto;margin:0}.main{margin:0;width:100%;padding:22px 14px;background:#f5f7fb;min-height:100vh;display:block}.grid{grid-template-columns:1fr}.top{flex-direction:column}.top h1{font-size:25px}.timeline{overflow-x:auto;grid-template-columns:repeat(5,minmax(110px,1fr));padding-bottom:4px}}
+
+.community-grid{display:grid;grid-template-columns:1.25fr .75fr;gap:18px}.community-toolbar{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:16px}.community-toolbar select,.community-toolbar input{border:1px solid var(--line);border-radius:10px;padding:10px 11px;background:#fff;color:var(--ink);font-size:12px}.video-feed{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.video-card{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff}.video-thumb{height:150px;background:linear-gradient(135deg,#163866,#4b8fc1 48%,#e4b978);position:relative;display:grid;place-items:center;color:#fff;font-size:28px}.video-thumb.city{background:linear-gradient(135deg,#172b52,#679bd1 50%,#f4b06c)}.video-thumb.coast{background:linear-gradient(135deg,#124d72,#42a7b7 48%,#f2d28b)}.video-thumb.forest{background:linear-gradient(135deg,#193c37,#6a9f62 55%,#d7b87b)}.play{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:#ffffffd9;color:var(--navy);padding-left:3px}.video-info{padding:12px}.video-info h3{font-size:14px;margin:0 0 5px}.video-info p{font-size:11px;color:var(--muted);margin:0 0 9px}.video-meta{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted)}.like{border:0;background:#edf3ff;color:#2863d0;border-radius:999px;padding:6px 9px}.liked{background:#ffe9ee;color:#d54868}.analysis-box{background:#f7faff;border:1px solid #dce8fb;border-radius:14px;padding:15px;margin-bottom:13px}.analysis-score{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.bar{height:8px;border-radius:99px;background:#e1e9f7;overflow:hidden}.bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#2f75ff,#50c79a)}.tag-list{display:flex;flex-wrap:wrap;gap:7px;margin-top:11px}.tag{font-size:11px;background:#fff;border:1px solid #dce6f7;padding:6px 8px;border-radius:999px;color:#3267cf}.upload-box{border:1px dashed #9ab7ec;border-radius:13px;background:#f8fbff;padding:16px;text-align:center}.upload-box p{font-size:12px;color:var(--muted);margin:7px 0 12px}.community-note{font-size:11px;color:var(--muted);line-height:1.6;margin-top:12px}@media(max-width:800px){.community-grid{grid-template-columns:1fr}.video-feed{grid-template-columns:1fr}.community-toolbar>*{width:100%}}
+.like-btn{touch-action:manipulation;cursor:pointer}.like-btn.liked{color:#e24b62;background:#fff0f2;border-color:#f2a6b2}.like-btn:active{transform:scale(.97)}
+.grid{min-width:0}.grid>.card{min-width:0;overflow:hidden}.timeline{width:100%;min-width:0;grid-template-columns:repeat(5,minmax(0,1fr))}.time{min-width:0;overflow-wrap:anywhere;word-break:keep-all;line-height:1.45}.metric{min-width:0;align-items:flex-start}.metric>span,.metric>b{min-width:0;overflow-wrap:anywhere;word-break:keep-all}.metric>span:last-child,.metric>b:last-child{text-align:right}@media(max-width:800px){.timeline{gap:4px;margin-left:0;margin-right:0}.time{font-size:10px;padding:8px 2px}.time b{font-size:10px;margin-bottom:5px}.metric{gap:8px;font-size:12px}.metric>span:first-child{flex:0 1 42%}.metric>span:last-child,.metric>b:last-child{flex:1 1 58%}.card{padding:16px}}
+</style>
+</head>
+<body>
+<div style="background:#0b1b38; padding:8px 16px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.12); font-size:12px; color:#ffffff; position:sticky; top:0; z-index:100;">
+  <div style="display:flex; align-items:center; gap:6px; font-weight:800;">
+    <span>🛸 날려드려 모바일 도우미</span>
+    <span style="font-size:10px; background:#16a36a; color:white; padding:1px 6px; border-radius:10px;">온라인</span>
+  </div>
+  <div style="display:flex; gap:6px;">
+    <a href="camera.html" style="background:#2f75ff; color:white; padding:4px 10px; border-radius:99px; text-decoration:none; font-weight:700; font-size:11px;">📸 카메라 가이드</a>
+    <a href="pc.html" style="background:rgba(255,255,255,0.18); color:white; padding:4px 10px; border-radius:99px; text-decoration:none; font-weight:700; font-size:11px;">💻 PC 관제</a>
+  </div>
+</div>
+<div class="app"><aside class="side"><div class="brand"><div class="mark">✦</div>날려드려 <span style="font-weight:500;color:#9bb4df">촬영 도우미</span></div><div class="nav-title">촬영 관리</div><nav class="nav"><button class="active" data-page="application"><span>▣</span>내 촬영 신청</button><button data-page="condition"><span>☼</span>시간·비행 조건</button><button data-page="route"><span>⌖</span>경로·구도 추천</button><button data-page="camera"><span>◉</span>카메라 연동</button><button data-page="guide"><span>▤</span>실시간 구도 가이드</button><button data-page="community"><span>♧</span>사용자 커뮤니티</button></nav><div class="side-note">신청은 웹에서 진행하고,<br>앱에서는 신청 내용을 확인하고<br>촬영을 준비할 수 있습니다.<br><br>※ 실제 비행 전 최신 기상·공역·기체 상태를 확인하세요.</div></aside>
+<main class="main"><header class="top"><div><div class="eyebrow">MY SHOOTING APPLICATION</div><h1>AI 시네마틱 드론 촬영 도우미</h1><p>웹에서 신청한 촬영 계획을 확인하고 촬영 과정을 준비하세요.</p></div><div class="top-right"><a href="pc.html" class="switch-btn">💻 PC 관제 대시보드</a><div class="status">● 모바일 웹 구동 중</div></div></header>
+<section id="application" class="page">
+  <div class="grid">
+    <!-- Left: Application List & Selected Details -->
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <h2 style="margin:0;">내 촬영 신청 목록</h2>
+        <span style="font-size:11px; background:#eff6ff; color:#1d4ed8; font-weight:700; padding:3px 8px; border-radius:12px;">터치 시 AI 계획 자동 분석</span>
+      </div>
+      <p class="sub">신청 내역을 선택하면 하단의 <b>AI 촬영 계획 요약 및 비행 적합도 분석</b>이 즉시 변경됩니다.</p>
+      
+      <!-- Application 1: Hangang (CTR) -->
+      <div class="application selected" 
+           data-id="APP-001"
+           data-lat="37.5284"
+           data-lon="126.9328"
+           data-title="한강 수변 시네마틱 풍경 촬영" 
+           data-purpose="경관·여행" 
+           data-place="서울 한강공원 (여의도 수변)" 
+           data-zone="서울 관제권 (CTR) · 사전 비행승인 필요"
+           data-suitability="CAUTION"
+           data-score="84"
+           data-date="2026년 10월 24일" 
+           data-time="오후 15:30 ~ 17:30 (골든아워)" 
+           data-drone="DJI Mini 4 Pro (249g 완구/경량)"
+           data-intent="한강을 따라 이동하며 고층 빌딩과 노을 분위기를 시네마틱하게 담고 싶어요."
+           data-concept="한강 와이드 Establishing Shot + 저고도 슬로우 트래킹 + 골든아워 매직아워 촬영"
+           data-camera="4K 60fps · 셔터 1/240s · ISO 100 · ND16 필터 권장"
+           data-tags="서울관제권사전승인,골든아워일몰전착륙,수변전파간섭주의,150m고도준수">
+        <div>
+          <h3>한강 수변 시네마틱 풍경 촬영</h3>
+          <p>경관·여행 · 서울 여의도 한강공원 · 10.24</p>
+        </div>
+        <span class="badge" style="background:#fef3c7; color:#92400e;">🟡 승인 필요</span>
+        <span class="arrow">›</span>
+      </div>
+
+      <!-- Application 2: Gimcheon (G Airspace - Free) -->
+      <div class="application" 
+           data-id="APP-002"
+           data-lat="36.1305"
+           data-lon="128.1720"
+           data-title="김천 혁신도시 건축물 360° 촬영" 
+           data-purpose="시설물·자연" 
+           data-place="경북 김천시 율곡동 (혁신도시)" 
+           data-zone="비관제공역 (G공역) · 비행승인 면제"
+           data-suitability="SUITABLE"
+           data-score="96"
+           data-date="2026년 10월 28일" 
+           data-time="오전 11:00 ~ 13:00 (주간 시계비행)" 
+           data-drone="DJI Mini 3 Pro (249g)"
+           data-intent="혁신도시 공공기관 건물과 주변 녹지 공간을 360도 회전 궤적으로 기록하고 싶습니다."
+           data-concept="POI Orbit (360도 피사체 회전) + 45도 하향 버드아이 뷰 앵글"
+           data-camera="4K 30fps · 셔터 1/120s · ISO 100 · CPL 편광 필터"
+           data-tags="250g이하자유비행,비행승인면제구역,시계비행준수,안전거리확보">
+        <div>
+          <h3>김천 혁신도시 건축물 360° 촬영</h3>
+          <p>시설물·자연 · 김천 율곡동 · 10.28</p>
+        </div>
+        <span class="badge" style="background:#e5f8ef; color:#087e50;">🟢 비행 적합</span>
+        <span class="arrow">›</span>
+      </div>
+
+      <!-- Application 3: Yongsan (P-73 Prohibited) -->
+      <div class="application" 
+           data-id="APP-003"
+           data-lat="37.5365"
+           data-lon="126.9771"
+           data-title="용산 역사문화 랜드마크 기록" 
+           data-purpose="역사·다큐" 
+           data-place="서울 용산구 전쟁기념관 일대" 
+           data-zone="P-73 비행금지구역 (대통령실 보안구역)"
+           data-suitability="PROHIBITED"
+           data-score="28"
+           data-date="2026년 11월 01일" 
+           data-time="오후 15:00 ~ 16:30" 
+           data-drone="DJI Air 3"
+           data-intent="전쟁기념관 조형물과 주변 도심 랜드마크를 항공 다큐멘터리 용도로 촬영 희망."
+           data-concept="원칙적 비행 불가 공역 · 국방부 및 수방사 특별 보안승인 필수"
+           data-camera="비행 불가 (승인 득행 전 카메라 가동 금지)"
+           data-tags="P73비행금지구역,사전비행불가,무단비행시300만원과태료,형사처벌주의">
+        <div>
+          <h3>용산 역사문화 랜드마크 기록</h3>
+          <p>역사·다큐 · 서울 용산 전쟁기념관 · 11.01</p>
+        </div>
+        <span class="badge" style="background:#fee2e2; color:#b91c1c;">🔴 비행 불가</span>
+        <span class="arrow">›</span>
+      </div>
+
+      <!-- Application 4: Campus Event (CTR Population) -->
+      <div class="application" 
+           data-id="APP-004"
+           data-lat="37.5586"
+           data-lon="127.0493"
+           data-title="졸업식 캠퍼스 항공 기록" 
+           data-purpose="추억·행사" 
+           data-place="서울 성동구 한양여자대학교" 
+           data-zone="서울 관제권 (CTR) 및 인구밀집지역"
+           data-suitability="CAUTION"
+           data-score="78"
+           data-date="2026년 11월 02일" 
+           data-time="오전 10:00 ~ 12:00" 
+           data-drone="DJI Mini 4 Pro"
+           data-intent="행사장 전체 분위기와 학생들의 활기찬 모습을 안전하게 기록하고 싶어요."
+           data-concept="군중 상공 직상 비행 금지 + 운동장 외곽 사각지대 고도 40m 와이드샷"
+           data-camera="4K 60fps · 셔터 1/240s · ISO 100 · 프로펠러 가드 장착"
+           data-tags="군중상공비행금지,서울지방항공청승인,비상착륙구역지정,조종자준수사항">
+        <div>
+          <h3>졸업식 캠퍼스 항공 기록</h3>
+          <p>추억·행사 · 한양여대 운동장 · 11.02</p>
+        </div>
+        <span class="badge" style="background:#fff3e8; color:#be661e;">🟡 승인 필요</span>
+        <span class="arrow">›</span>
+      </div>
+
+      <!-- Application 5: Jeju Sunrise (Free Coastal) -->
+      <div class="application" 
+           data-id="APP-005"
+           data-lat="33.4584"
+           data-lon="126.9425"
+           data-title="제주 성산일출봉 해안 절경" 
+           data-purpose="자연·시네마틱" 
+           data-place="제주 서귀포시 성산일출봉 해안" 
+           data-zone="제주 남부 일반공역 (개방형 비관제)"
+           data-suitability="SUITABLE"
+           data-score="92"
+           data-date="2026년 11월 05일" 
+           data-time="오전 06:40 ~ 08:00 (일출 골든아워)" 
+           data-drone="DJI Mavic 3 Classic"
+           data-intent="일출 순간 황금빛 햇살이 비추는 수면과 분화구 능선을 장엄하게 담고 싶습니다."
+           data-concept="태양 역광 실루엣 샷 + 해안선 드로니(Dronie) 후진 상승 비행"
+           data-camera="4K 60fps · 셔터 1/240s · ISO 100 · ND32 필터 권장"
+           data-tags="일출시점주간비행개시,해풍돌풍주의,배터리35%복귀,자연공원비행준수">
+        <div>
+          <h3>제주 성산일출봉 해안 절경</h3>
+          <p>자연·시네마틱 · 제주 성산일출봉 · 11.05</p>
+        </div>
+        <span class="badge" style="background:#e5f8ef; color:#087e50;">🟢 비행 적합</span>
+        <span class="arrow">›</span>
+      </div>
+
+      <!-- Detail Box -->
+      <div id="applicationDetail" class="detail">
+        <div><b>촬영 목적</b><span id="dtPurpose">경관·여행</span></div>
+        <div><b>촬영 장소</b><span id="dtPlace">서울 한강공원 (여의도 수변)</span></div>
+        <div><b>공역 규제</b><span id="dtZone" style="font-weight:700; color:#d97706;">서울 관제권 (CTR) · 사전 비행승인 필요</span></div>
+        <div><b>촬영 날짜</b><span id="dtDate">2026년 10월 24일</span></div>
+        <div><b>신청 시간</b><span id="dtTime">오후 15:30 ~ 17:30 (골든아워)</span></div>
+        <div><b>현장 기상</b><span id="dtWeather">기상청 실시간 조회 중...</span></div>
+        <div><b>기체 제원</b><span id="dtDrone">DJI Mini 4 Pro (249g 완구/경량)</span></div>
+        <div><b>촬영 의도</b><span id="dtIntent">한강을 따라 이동하며 고층 빌딩과 노을 분위기를 시네마틱하게 담고 싶어요.</span></div>
+      </div>
+    </div>
+
+    <!-- Right: Dynamic AI Shooting Plan Summary Card -->
+    <div class="card" id="aiPlanSummaryCard">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <h2 style="margin:0;">AI 촬영 계획 요약</h2>
+        <span id="aiPlanSuitBadge" style="font-size:11px; font-weight:800; padding:4px 10px; border-radius:12px; background:#fef3c7; color:#92400e;">
+          🟡 주의 필요 (사전 비행승인 요망)
+        </span>
+      </div>
+      <p class="sub">선택된 촬영 신청의 <b>장소, 시간, 기상, 목적</b>을 AI가 종합 분석한 맞춤 비행 지침입니다.</p>
+      
+      <!-- Score Ring & Title -->
+      <div class="score" style="margin-bottom:16px;">
+        <div class="ring" id="aiPlanRing" style="border-color:#d97706;">
+          <b id="aiPlanScore">84</b>
+        </div>
+        <div>
+          <strong id="aiPlanTitle" style="font-size:16px; color:var(--navy);">경관·여행 시네마틱 계획</strong>
+          <small id="aiPlanSub" style="display:block; margin-top:3px; color:var(--muted); line-height:1.4;">
+            관제권 내 비행이므로 사전 드론원스톱 승인 후 일몰 전 골든아워 저고도 촬영을 권장합니다.
+          </small>
+        </div>
+      </div>
+
+      <!-- 4-Section Detailed Analysis Grid -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:10px 12px;">
+          <div style="font-size:11px; font-weight:700; color:#64748b; margin-bottom:2px;">📍 비행 공역 분석</div>
+          <div id="aiPlanZoneText" style="font-size:12px; font-weight:800; color:#0f172a; line-height:1.4;">
+            서울 관제권 (CTR)<br><span style="font-size:11px; color:#d97706; font-weight:600;">드론원스톱 승인 필수</span>
+          </div>
+        </div>
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:10px 12px;">
+          <div style="font-size:11px; font-weight:700; color:#64748b; margin-bottom:2px;">⏰ 시간 & 일몰 분석</div>
+          <div id="aiPlanTimeText" style="font-size:12px; font-weight:800; color:#0f172a; line-height:1.4;">
+            골든아워 진입<br><span style="font-size:11px; color:#059669; font-weight:600;">17:30 이전 착륙 완료 요망</span>
+          </div>
+        </div>
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:10px 12px;">
+          <div style="font-size:11px; font-weight:700; color:#64748b; margin-bottom:2px;">🌤️ 기상 안전 지수</div>
+          <div id="aiPlanWeatherText" style="font-size:12px; font-weight:800; color:#0f172a; line-height:1.4;">
+            기상청 실황 조회 중...<br><span style="font-size:11px; color:#64748b; font-weight:600;">KMA API 연동 대기</span>
+          </div>
+        </div>
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:10px 12px;">
+          <div style="font-size:11px; font-weight:700; color:#64748b; margin-bottom:2px;">📷 카메라 세팅 레시피</div>
+          <div id="aiPlanCameraText" style="font-size:12px; font-weight:800; color:#0f172a; line-height:1.4;">
+            4K 60fps · 1/240s<br><span style="font-size:11px; color:#2563eb; font-weight:600;">ND16 필터 착용 권장</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recommendation Concept Box -->
+      <div class="recommend" id="aiPlanConceptBox" style="margin-bottom:12px;">
+        <b style="color:var(--navy);">🎯 AI 추천 촬영 콘셉트</b><br>
+        <span id="aiPlanConceptText">한강 와이드 Establishing Shot + 저고도 슬로우 트래킹 + 골든아워 매직아워 촬영</span>
+      </div>
+
+      <!-- Tags -->
+      <div class="chips" id="aiPlanChips">
+        <span class="chip">#서울관제권사전승인</span>
+        <span class="chip">#골든아워일몰전착륙</span>
+        <span class="chip">#수변전파간섭주의</span>
+        <span class="chip">#150m고도준수</span>
+      </div>
+
+      <!-- Button to Open Camera with this Project -->
+      <div style="margin-top:16px;">
+        <button type="button" id="btnLaunchCameraWithApp" class="switch-btn" style="width:100%; text-align:center; padding:14px; background:linear-gradient(135deg,#10254b,#2f75ff); color:white; font-size:14px; font-weight:800; border-radius:12px; border:none; box-shadow:0 4px 12px rgba(47,117,255,0.25);">
+          📸 이 계획으로 실시간 AI 카메라 가이드 시작하기 ➔
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+<section id="condition" class="page hidden"><div class="grid"><div class="card"><h2>시간대 및 비행 조건 분석</h2><p class="sub" id="condSubDesc">선택된 현장 좌표의 기상청 실시간 관측·예보 정보를 표시합니다.</p><div class="timeline" id="condTimeline"><div class="time"><b>--:--</b>조회 중<br>풍속 --m/s</div><div class="time"><b>--:--</b>조회 중<br>풍속 --m/s</div><div class="time"><b>--:--</b>조회 중<br>풍속 --m/s</div><div class="time"><b>--:--</b>조회 중<br>풍속 --m/s</div><div class="time"><b>--:--</b>조회 중<br>풍속 --m/s</div></div><div class="metric"><span>촬영 계획 시간</span><b class="green" id="condTimePlan">오후 15:30 ~ 17:30 (골든아워)</b></div><div class="metric"><span>현재 기온 · 풍속</span><span id="condWind">기상청 실황 조회 중...</span></div><div class="metric"><span>강수량 · 강수확률</span><span class="green" id="condRainProb">조회 중...</span></div><div class="metric"><span>관측 시각 · KMA 격자</span><span id="condObsGrid">실시간 연동 중...</span></div></div><div class="card"><h2>운용 조건 체크</h2><p class="sub">기상청 실시간 풍속·돌풍·강수량 기준 확인 항목입니다.</p><div class="recommend" id="condRecommend" style="border-color:var(--blue);background:#f8fbff"><b>기상청 실황 조회 중...</b><br>선택한 촬영지의 실시간 기상청 데이터를 불러오고 있습니다.</div><div class="chips" id="condChips"><span class="chip">✓ 시야 확보</span><span class="chip">✓ 배터리 여유</span><span class="chip">! 사람 밀집도 확인</span><span class="chip">! 공역 승인 확인</span></div></div></div></section>
+<section id="route" class="page hidden"><div class="grid"><div class="card"><h2>촬영 포인트 및 비행 경로</h2><p class="sub">신청한 촬영 목적에 맞춘 추천 경로입니다.</p><div class="map"><div class="route"></div><div class="point p1"></div><div class="point p2"></div><div class="point p3"></div></div><div class="legend"><i style="background:#ff6b5e"></i>촬영 포인트　 <i style="background:#326eff"></i>추천 비행 경로</div></div><div class="card"><h2>포인트별 촬영 지시</h2><p class="sub">초보자도 따라 할 수 있도록 순서대로 안내합니다.</p><div class="metric"><span><b>01</b> 시작 지점</span><span>고도 30m · 북동쪽</span></div><div class="metric"><span><b>02</b> 메인 포인트</span><span>고도 45m · 대상 정면</span></div><div class="metric"><span><b>03</b> 마무리 포인트</span><span>고도 35m · 남서쪽</span></div><div class="recommend" style="margin-top:16px"><b>추천 무빙</b><br>시작 지점에서 천천히 전진하면서 우측으로 20° 팬하고, 메인 포인트에서 3초간 정지 촬영하세요.</div></div></div></section>
+<section id="camera" class="page hidden"><div class="grid"><div class="card"><h2>카메라 연동</h2><p class="sub">휴대폰 카메라를 사용하거나 촬영한 영상을 불러와 구도를 확인할 수 있습니다.</p><div class="camera-box"><div class="connection" id="connection"><i class="dot"></i><span>카메라 연결 안 됨</span></div><div class="camera-preview"><video id="video" autoplay playsinline muted class="hidden"></video><span id="previewText">카메라 미리보기 영역</span></div><div class="camera-actions"><button class="primary" id="openCameraPage" type="button">휴대폰 카메라 연결</button><label class="secondary">촬영 영상 불러오기<input id="videoFile" type="file" accept="video/*" hidden></label></div></div></div><div class="card"><h2>연동 후 사용할 기능</h2><p class="sub">카메라 화면은 실시간 구도 가이드와 연결됩니다.</p><div class="metric"><span>목표 구도 프레임</span><b>카메라 화면 위에 표시</b></div><div class="metric"><span>현재 구도 비교</span><b>피사체 위치·수평선 분석</b></div><div class="metric"><span>상태 안내</span><b class="green">구도 양호 / 조정 필요</b></div><div class="recommend" style="margin-top:16px"><b>권한 안내</b><br>브라우저에서 카메라 권한을 허용해야 합니다. 실제 드론 카메라 연동은 기체 제조사 SDK 또는 별도 전송 모듈 연결이 필요합니다.</div></div></div></section>
+<section id="guide" class="page hidden"><div class="grid"><div class="card"><h2>실시간 촬영 구도 가이드</h2><p class="sub">카메라 화면과 목표 구도를 비교하는 프로토타입입니다.</p><div class="guide"><h3>목표 구도 · 한강 와이드 establishing shot</h3><div class="frame">목표 피사체 영역<br>수평선 유지</div><p>현재 구도 양호 · 드론을 0.5m 전진하세요</p></div></div><div class="card"><h2>조종기 스틱 콤보</h2><p class="sub">추천 경로를 재현하기 위한 간단한 조작 안내입니다.</p><div class="metric"><span>1단계 · 전진</span><b>왼쪽 스틱 ↑ 30%</b></div><div class="metric"><span>2단계 · 우측 팬</span><b>오른쪽 스틱 → 20%</b></div><div class="metric"><span>3단계 · 고도 유지</span><b>왼쪽 스틱 중앙</b></div><div class="recommend" style="margin-top:16px"><b>초보자 팁</b><br>한 번에 여러 방향을 조작하지 말고 각 동작을 3~5초씩 나누어 확인하세요.</div></div></div></section>
+<section id="community" class="page hidden"><div class="community-grid"><div class="card"><h2>사용자 커뮤니티</h2><p class="sub">드론 촬영 영상을 공유하고 다른 사용자의 구도와 촬영 방식을 참고하세요.</p><div class="community-toolbar"><select id="communityFilter"><option value="all">전체 영상</option><option value="landscape">경관·여행</option><option value="event">행사·기록</option><option value="cinematic">시네마틱</option></select><input id="communitySearch" placeholder="영상 제목·장소 검색"><button class="primary" id="newUpload">영상 업로드</button></div><div class="video-feed" id="videoFeed"><article class="video-card" data-category="landscape" data-search="한강 석양 서울 경관 시네마틱"><div class="video-thumb city"><div class="play">▶</div></div><div class="video-info"><h3>한강 석양을 따라가는 트래킹</h3><p>서울 한강공원 · 경관·여행</p><div class="video-meta"><span>♥ 128 · 조회 1,240</span><button class="like">♡ 좋아요</button></div></div></article><article class="video-card" data-category="cinematic" data-search="제주 해안 오빗 바다 시네마틱"><div class="video-thumb coast"><div class="play">▶</div></div><div class="video-info"><h3>제주 해안 오빗 무빙</h3><p>제주 애월 · 시네마틱</p><div class="video-meta"><span>♥ 96 · 조회 874</span><button class="like">♡ 좋아요</button></div></div></article><article class="video-card" data-category="landscape" data-search="숲길 상승 항공 풍경"><div class="video-thumb forest"><div class="play">▶</div></div><div class="video-info"><h3>숲길을 내려다보는 상승 샷</h3><p>강원도 인제 · 경관·여행</p><div class="video-meta"><span>♥ 74 · 조회 632</span><button class="like">♡ 좋아요</button></div></div></article><article class="video-card" data-category="event" data-search="졸업식 행사 기록 드론"><div class="video-thumb"><div class="play">▶</div></div><div class="video-info"><h3>캠퍼스 졸업식 전경 기록</h3><p>서울 ○○대학교 · 행사·기록</p><div class="video-meta"><span>♥ 51 · 조회 410</span><button class="like">♡ 좋아요</button></div></div></article></div><div class="community-note">※ 영상은 예시 데이터입니다. 실제 서비스에서는 업로드 파일 저장, 신고·공개 범위 설정, 저작권 및 개인정보 보호 검토가 필요합니다.</div></div><div><div class="card"><h2>선호 구도 분석</h2><p class="sub">커뮤니티 영상의 좋아요·조회·영상 메타데이터를 바탕으로 집계한 예시입니다.</p><div class="analysis-box"><div class="analysis-score"><span>가장 선호되는 구도</span><b class="green">와이드 트래킹</b></div><div class="bar"><i style="width:78%"></i></div><div class="tag-list"><span class="tag">넓은 풍경 78%</span><span class="tag">느린 전진 64%</span><span class="tag">수평 유지 61%</span></div></div><div class="metric"><span>선호 카메라 방향</span><b>정면·사선 58%</b></div><div class="metric"><span>선호 비행 무빙</span><b>트래킹·오빗</b></div><div class="metric"><span>선호 고도 범위</span><b>30~50m</b></div><div class="recommend" style="margin-top:16px"><b>추천 기능 반영 예정</b><br>다음 촬영 계획의 구도 추천 시, 사용자의 목적·장소·시간과 함께 커뮤니티에서 선호도가 높은 구도를 참고 데이터로 활용합니다.</div></div><div class="card" style="margin-top:18px"><h2>내 영상 공유</h2><p class="sub">촬영한 영상을 커뮤니티에 올려 선호 구도 분석에 참여하세요.</p><div class="upload-box"><div style="font-size:26px">＋</div><p>MP4, MOV 등 촬영 영상을 선택하세요.</p><label class="primary" style="display:inline-block">영상 선택<input id="communityUpload" type="file" accept="video/*" hidden></label><div id="uploadStatus" class="community-note"></div></div></div></div></div></section><div id="toast" class="toast">신청 내용을 불러왔습니다.</div></main></div>
+<script>
+const $=id=>document.getElementById(id);
+const pages=[...document.querySelectorAll('.page')],buttons=[...document.querySelectorAll('.nav button')],toastEl=document.querySelector('#toast');
+function toast(t){toastEl.textContent=t;toastEl.style.display='block';setTimeout(()=>toastEl.style.display='none',2200)}
+function openPage(b){buttons.forEach(x=>x.classList.remove('active'));b.classList.add('active');pages.forEach(p=>p.classList.toggle('hidden',p.id!==b.dataset.page));window.scrollTo({top:0,behavior:'smooth'})}buttons.forEach(b=>{b.addEventListener('click',()=>openPage(b),{passive:true});b.addEventListener('touchend',e=>{e.preventDefault();openPage(b)},{passive:false})});
+const detail=document.querySelector('#applicationDetail');
+let mobileWeatherReqSeq = 0;
+
+function getMobileApiBases() {
+  const proto = window.location.protocol;
+  const host = window.location.hostname;
+  const port = window.location.port;
+  if (proto === 'file:') return ['http://127.0.0.1:8000', 'http://localhost:8000'];
+  if (port === '8000') return [''];
+  if (host === 'localhost' || host === '127.0.0.1') return ['', `http://${host}:8000`];
+  return [''];
+}
+
+async function fetchMobileKmaWeather(lat, lon, placeName) {
+  const qs = `/api/external/weather?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&location=${encodeURIComponent(placeName || '')}`;
+  const bases = getMobileApiBases();
+  let lastErr = null;
+  for (const base of bases) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 9000);
+    try {
+      const res = await fetch(`${base}${qs}`, { signal: controller.signal, headers: { 'Accept': 'application/json' } });
+      clearTimeout(timer);
+      if (res.ok) return await res.json();
+      let msg = `HTTP ${res.status}`;
+      try { const j = await res.json(); if (j && j.detail) msg = j.detail; } catch (e) {}
+      lastErr = new Error(msg);
+      if (res.status !== 404 && res.status !== 502) throw lastErr;
+    } catch (err) {
+      clearTimeout(timer);
+      lastErr = err;
+    }
+  }
+  throw lastErr || new Error('기상청 백엔드 응답 없음');
+}
+
+async function loadMobileKmaWeather(card) {
+  const reqSeq = ++mobileWeatherReqSeq;
+  const d = card ? card.dataset : {};
+  const lat = parseFloat(d.lat);
+  const lon = parseFloat(d.lon);
+  const place = d.place || '여의도';
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+
+  if ($('dtWeather')) $('dtWeather').textContent = '기상청 실시간 조회 중...';
+  if ($('aiPlanWeatherText')) {
+    $('aiPlanWeatherText').innerHTML = `기상청 실황 조회 중...<br><span style="font-size:11px; color:#64748b; font-weight:600;">KMA API 연동 중</span>`;
+  }
+  if ($('condTimePlan')) $('condTimePlan').textContent = d.time || '주간 비행';
+
+  try {
+    const kma = await fetchMobileKmaWeather(lat, lon, place);
+    if (reqSeq !== mobileWeatherReqSeq) return;
+
+    if ($('dtWeather')) {
+      $('dtWeather').textContent = `${kma.weather_icon || ''} ${kma.weather_condition} ${kma.temperature_c}°C · 풍속 ${kma.wind_speed_ms} m/s (돌풍 ${kma.wind_gust_ms} m/s) · 강수 ${kma.precipitation_mm_h} mm/h`;
+    }
+    if ($('aiPlanWeatherText')) {
+      const windClr = kma.is_safe_to_fly ? '#059669' : '#dc2626';
+      $('aiPlanWeatherText').innerHTML = `${kma.weather_condition} ${kma.temperature_c}°C · ${kma.wind_speed_ms} m/s<br><span style="font-size:11px; color:${windClr}; font-weight:600;">${kma.safety_status} · 시계 ${kma.visibility_km}km</span>`;
+    }
+    if ($('condSubDesc')) {
+      $('condSubDesc').textContent = `${place} 기준 기상청 실시간 관측(${kma.observed_at || 'KST'}) 및 초단기예보입니다.`;
+    }
+    if ($('condTimeline') && Array.isArray(kma.hourly_forecast) && kma.hourly_forecast.length > 0) {
+      $('condTimeline').innerHTML = kma.hourly_forecast.slice(0, 5).map(slot => {
+        const cls = slot.status === '최적' ? 'time good' : 'time';
+        const windNum = Number(String(slot.wind || '').replace(/[^0-9.]/g, ''));
+        const tag = slot.status || (Number.isFinite(windNum) && windNum >= 7 ? '주의' : '예보');
+        return `<div class="${cls}"><b>${slot.time || '--:--'}</b>${slot.temp || ''}<br>${slot.wind || ''}<br><small>${tag}</small></div>`;
+      }).join('');
+    }
+    if ($('condWind')) {
+      $('condWind').textContent = `${kma.temperature_c}°C · 풍속 ${kma.wind_speed_ms} m/s (${kma.wind_direction_text}, 돌풍 ${kma.wind_gust_ms} m/s)`;
+    }
+    if ($('condRainProb')) {
+      const rainProb = Array.isArray(kma.hourly_forecast) && kma.hourly_forecast[0] && kma.hourly_forecast[0].rainProb ? kma.hourly_forecast[0].rainProb : '-';
+      $('condRainProb').className = kma.precipitation_mm_h > 0 ? '' : 'green';
+      $('condRainProb').style.color = kma.precipitation_mm_h > 0 ? '#dc2626' : '';
+      $('condRainProb').textContent = `실황 ${kma.precipitation_mm_h} mm/h · 강수확률 ${rainProb}`;
+    }
+    if ($('condObsGrid')) {
+      const g = kma.kma_grid ? `격자 (${kma.kma_grid.nx}, ${kma.kma_grid.ny})` : '';
+      $('condObsGrid').textContent = `${kma.observed_at || '실시간'} ${g}`.trim();
+    }
+    if ($('condRecommend')) {
+      const recEl = $('condRecommend');
+      if (kma.is_safe_to_fly) {
+        recEl.style.borderColor = 'var(--green)';
+        recEl.style.background = '#effbf5';
+        const riskNote = (kma.risk_factors && kma.risk_factors.length > 0) ? `<br>주의사항: ${kma.risk_factors[0]}` : '';
+        recEl.innerHTML = `<b>${kma.safety_status}</b><br>기상청 실시간 기온 ${kma.temperature_c}°C, 풍속 ${kma.wind_speed_ms}m/s, 강수 ${kma.precipitation_mm_h}mm/h로 비행 가능합니다.${riskNote}`;
+      } else {
+        recEl.style.borderColor = '#dc2626';
+        recEl.style.background = '#fef2f2';
+        const reasons = (kma.risk_factors && kma.risk_factors.length > 0) ? kma.risk_factors.join(' / ') : '기상 위험 기준 초과';
+        recEl.innerHTML = `<b style="color:#dc2626;">${kma.safety_status}</b><br>${reasons}`;
+      }
+    }
+  } catch (err) {
+    if (reqSeq !== mobileWeatherReqSeq) return;
+    const msg = String(err && err.message ? err.message : '기상청 API 연결 실패').replace(/[<>&]/g, '');
+    if ($('dtWeather')) $('dtWeather').textContent = `⚠️ 기상청 API 조회 실패 (${msg})`;
+    if ($('aiPlanWeatherText')) {
+      $('aiPlanWeatherText').innerHTML = `⚠️ 기상청 조회 실패<br><span style="font-size:11px; color:#dc2626; font-weight:600;">${msg}</span>`;
+    }
+    if ($('condWind')) $('condWind').textContent = '기상청 API 조회 실패';
+    if ($('condRainProb')) $('condRainProb').textContent = '수신 불가 (시뮬레이션 미사용)';
+    if ($('condRecommend')) {
+      $('condRecommend').style.borderColor = '#dc2626';
+      $('condRecommend').style.background = '#fef2f2';
+      $('condRecommend').innerHTML = `<b style="color:#dc2626;">기상청 실시간 조회 실패</b><br>${msg} (백엔드 서버 연결 및 기상청 API 상태를 확인해 주세요.)`;
+    }
+  }
+}
+
+function updateAiPlanSummary(card) {
+  const d = card.dataset;
+  
+  // 1. Update Details Box
+  if ($('dtPurpose')) $('dtPurpose').textContent = d.purpose || '';
+  if ($('dtPlace')) $('dtPlace').textContent = d.place || '';
+  if ($('dtZone')) $('dtZone').textContent = d.zone || '';
+  if ($('dtDate')) $('dtDate').textContent = d.date || '';
+  if ($('dtTime')) $('dtTime').textContent = d.time || '';
+  if ($('dtWeather')) $('dtWeather').textContent = d.weather || '';
+  if ($('dtDrone')) $('dtDrone').textContent = d.drone || '';
+  if ($('dtIntent')) $('dtIntent').textContent = d.intent || '';
+
+  // 2. Update AI Plan Summary
+  const score = parseInt(d.score) || 85;
+  const suit = d.suitability || 'CAUTION';
+
+  const ringEl = $('aiPlanRing');
+  const scoreEl = $('aiPlanScore');
+  const badgeEl = $('aiPlanSuitBadge');
+  const titleEl = $('aiPlanTitle');
+  const subEl = $('aiPlanSub');
+
+  if (scoreEl) scoreEl.textContent = score;
+
+  if (suit === 'SUITABLE') {
+    if (ringEl) ringEl.style.borderColor = '#059669';
+    if (badgeEl) {
+      badgeEl.textContent = '🟢 비행 적합 (자유 비행 가능)';
+      badgeEl.style.background = '#dcfce7';
+      badgeEl.style.color = '#15803d';
+    }
+    if (titleEl) titleEl.textContent = `${d.purpose} 자유 비행 계획`;
+    if (subEl) subEl.textContent = '비관제공역으로 250g 이하 완구/경량 드론은 별도 승인 없이 안전하게 비행할 수 있습니다.';
+  } else if (suit === 'PROHIBITED') {
+    if (ringEl) ringEl.style.borderColor = '#dc2626';
+    if (badgeEl) {
+      badgeEl.textContent = '🔴 비행 불가 (P-73 비행금지구역)';
+      badgeEl.style.background = '#fee2e2';
+      badgeEl.style.color = '#b91c1c';
+    }
+    if (titleEl) titleEl.textContent = `${d.purpose} 비행 절대 금지 경고`;
+    if (subEl) subEl.textContent = '대통령실 및 국가 1급 보안시설 금지구역에 해당하여 원칙적 비행이 불가합니다. 위반 시 300만원 이하 과태료.';
+  } else {
+    if (ringEl) ringEl.style.borderColor = '#d97706';
+    if (badgeEl) {
+      badgeEl.textContent = '🟡 주의 필요 (사전 비행승인 요망)';
+      badgeEl.style.background = '#fef3c7';
+      badgeEl.style.color = '#92400e';
+    }
+    if (titleEl) titleEl.textContent = `${d.purpose} 관제권 비행 계획`;
+    if (subEl) subEl.textContent = '관제권 내 비행이므로 사전 드론원스톱 승인을 확인하고, 시계비행 수칙(150m)을 준수하세요.';
+  }
+
+  // 3. Grid Items
+  if ($('aiPlanZoneText')) $('aiPlanZoneText').innerHTML = `${(d.zone||'').split('·')[0]}<br><span style="font-size:11px; color:#d97706; font-weight:600;">${(d.zone||'').split('·')[1] || ''}</span>`;
+  if ($('aiPlanTimeText')) $('aiPlanTimeText').innerHTML = `${(d.time||'').split('(')[0]}<br><span style="font-size:11px; color:#059669; font-weight:600;">(${(d.time||'').split('(')[1] || '주간비행)'}</span>`;
+  if ($('aiPlanCameraText')) $('aiPlanCameraText').innerHTML = `${(d.camera||'').split('·')[0]} · ${(d.camera||'').split('·')[1] || ''}<br><span style="font-size:11px; color:#2563eb; font-weight:600;">${(d.camera||'').split('·')[2] || '추천'}</span>`;
+
+  // 4. Concept & Chips
+  if ($('aiPlanConceptText')) $('aiPlanConceptText').textContent = d.concept || '';
+  const chipsContainer = $('aiPlanChips');
+  if (chipsContainer && d.tags) {
+    const tagList = d.tags.split(',');
+    chipsContainer.innerHTML = tagList.map(t => `<span class="chip">#${t.trim()}</span>`).join('');
+  }
+
+  loadMobileKmaWeather(card);
+}
+
+document.querySelectorAll('.application').forEach(card => {
+  card.onclick = () => {
+    document.querySelectorAll('.application').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+    updateAiPlanSummary(card);
+    toast(`'${card.dataset.title}' AI 촬영 계획을 분석했습니다.`);
+  };
+});
+
+const btnLaunchCam = $('btnLaunchCameraWithApp');
+if (btnLaunchCam) {
+  btnLaunchCam.onclick = () => {
+    const sel = document.querySelector('.application.selected');
+    const pCode = sel ? sel.dataset.id : 'APP-001';
+    window.location.href = `camera.html?project_code=${pCode}&token=mobile_launch`;
+  };
+}
+document.querySelector('#openCameraPage').addEventListener('click',()=>{const w=window.open('camera.html','_blank');if(!w)toast('새 촬영 화면이 차단되었습니다. 브라우저 팝업을 허용해 주세요.');});document.querySelector('#videoFile').onchange=e=>{const f=e.target.files[0];if(f)toast('영상 파일을 선택했습니다. 촬영 화면에서 별도로 불러올 수도 있습니다.');};
+
+const filter=document.querySelector('#communityFilter'),search=document.querySelector('#communitySearch');function filterVideos(){const q=(search?.value||'').toLowerCase();document.querySelectorAll('.video-card').forEach(c=>{const okCat=!filter||filter.value==='all'||c.dataset.category===filter.value;const okSearch=!q||c.dataset.search.includes(q);c.style.display=okCat&&okSearch?'block':'none'})}filter?.addEventListener('change',filterVideos);search?.addEventListener('input',filterVideos);
+
+function attachLikeEvents() {
+  document.querySelectorAll('.like').forEach(b=>{
+    if (b.dataset.bound === 'true') return;
+    b.dataset.bound = 'true';
+    b.type='button';
+    b.addEventListener('click',function(e){
+      e.preventDefault(); e.stopPropagation();
+      const countEl=this.parentElement.querySelector('span');
+      if(!countEl) return;
+      const m=countEl.textContent.match(/(\d[\d,]*)/);
+      if(!m) return;
+      const current=parseInt(m[1].replace(/,/g,''),10)||0;
+      const liked=this.dataset.liked==='true';
+      const next=liked ? Math.max(0,current-1) : current+1;
+      countEl.textContent=countEl.textContent.replace(m[1],next.toLocaleString());
+      this.dataset.liked=liked?'false':'true';
+      this.classList.toggle('liked',!liked);
+      this.textContent=liked?'♡ 좋아요':'♥ 좋아요';
+      toast(liked?'선호도 분석에서 제외했습니다.':'선호도 분석에 반영했습니다.');
+    });
+  });
+}
+attachLikeEvents();
+
+document.querySelector('#newUpload')?.addEventListener('click',()=>document.querySelector('#communityUpload')?.click());document.querySelector('#communityUpload')?.addEventListener('change',e=>{const f=e.target.files[0];if(f){document.querySelector('#uploadStatus').textContent=`선택됨: ${f.name} · 업로드 전 미리보기`;toast('영상이 업로드 목록에 추가되었습니다.')}});
+
+function loadUploadedVideos() {
+  const feed = document.getElementById('videoFeed');
+  if (!feed) return;
+  const savedPosts = JSON.parse(localStorage.getItem('droneCommunityPosts') || '[]');
+  savedPosts.forEach(post => {
+    if (document.querySelector(`[data-post-id="${post.id}"]`)) return;
+    const article = document.createElement('article');
+    article.className = 'video-card';
+    article.dataset.postId = post.id;
+    article.dataset.category = post.category;
+    article.dataset.search = `${post.title} ${post.place} ${post.catLabel}`.toLowerCase();
+    article.innerHTML = `
+      <div class="video-thumb city"><div class="play">▶</div></div>
+      <div class="video-info">
+        <h3>${post.title}</h3>
+        <p>${post.place} · ${post.catLabel}</p>
+        <div class="video-meta">
+          <span>♥ ${post.likes} · 조회 ${post.views}</span>
+          <button type="button" class="like">♡ 좋아요</button>
+        </div>
+      </div>
+    `;
+    feed.prepend(article);
+  });
+  attachLikeEvents();
+
+  if (location.hash === '#community') {
+    const commBtn = document.querySelector('[data-page="community"]');
+    if (commBtn) openPage(commBtn);
+  }
+}
+loadUploadedVideos();
+const initialSelectedCard = document.querySelector('.application.selected');
+if (initialSelectedCard) updateAiPlanSummary(initialSelectedCard);
+</script>
+</body></html>

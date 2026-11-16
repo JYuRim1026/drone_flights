@@ -1,0 +1,5 @@
+/pc         /pc.html        200
+/mobile     /mobile.html    200
+/camera     /camera.html    200
+/app        /index.html     200
+/*          /index.html     200

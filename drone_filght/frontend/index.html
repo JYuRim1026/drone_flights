@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#10233f">
+<title>SkyCommand & 날려드려 통합 포털 | AI 드론 비행 안전 & 시네마틱 촬영</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Malgun Gothic", sans-serif; }
+body {
+    background: #090e17;
+    color: #ffffff;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 상단 통합 헤더 및 모드 전환 컨트롤러 */
+.portal-header {
+    height: 52px;
+    background: rgba(16, 35, 63, 0.95);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    z-index: 1000;
+    flex-shrink: 0;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 15px;
+    font-weight: 800;
+    color: #ffffff;
+    text-decoration: none;
+    letter-spacing: -0.02em;
+}
+.brand span.sub {
+    font-size: 11px;
+    color: #90caf9;
+    font-weight: 500;
+    background: rgba(47, 117, 255, 0.2);
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(47, 117, 255, 0.4);
+}
+
+/* 기기 모드 스위처 */
+.switcher {
+    display: flex;
+    background: rgba(0, 0, 0, 0.35);
+    padding: 3px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    gap: 2px;
+}
+.switch-btn {
+    border: 0;
+    background: transparent;
+    color: #94a3b8;
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.switch-btn:hover {
+    color: #ffffff;
+}
+.switch-btn.active {
+    background: linear-gradient(135deg, #2f75ff, #1d4ed8);
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(47, 117, 255, 0.4);
+}
+
+.device-indicator {
+    font-size: 11px;
+    color: #a5d6a7;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.device-indicator i {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #4caf50;
+}
+
+/* 메인 뷰포트 (아이프레임 컨테이너) */
+.viewport-container {
+    flex: 1;
+    width: 100%;
+    height: calc(100vh - 52px);
+    height: calc(100dvh - 52px);
+    position: relative;
+    background: #f5f7fb;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+}
+iframe#appFrame {
+    width: 100%;
+    height: 100%;
+    min-height: 100%;
+    border: none;
+    display: block;
+    background: #f5f7fb;
+}
+
+@media(max-width: 680px) {
+    .portal-header {
+        padding: 0 10px;
+        height: 48px;
+    }
+    .brand span.sub, .device-indicator {
+        display: none;
+    }
+    .switch-btn {
+        padding: 5px 10px;
+        font-size: 11px;
+    }
+    .viewport-container {
+        height: calc(100vh - 48px);
+    }
+}
+</style>
+</head>
+<body>
+
+<!-- 1. 단일 URL 통합 상단 바 -->
+<header class="portal-header">
+    <a href="index.html" class="brand">
+        <span>🛸</span> SkyCommand
+        <span class="sub">통합 단일 포털</span>
+    </a>
+
+    <!-- 기기/화면 전환 컨트롤러 -->
+    <nav class="switcher">
+        <button type="button" class="switch-btn" id="btnPC" onclick="switchView('pc')">
+            <span>💻</span> PC 관제
+        </button>
+        <button type="button" class="switch-btn" id="btnMobile" onclick="switchView('mobile')">
+            <span>📱</span> 모바일 도우미
+        </button>
+        <button type="button" class="switch-btn" id="btnCamera" onclick="switchView('camera')">
+            <span>📸</span> 카메라 가이드
+        </button>
+    </nav>
+
+    <div class="device-indicator">
+        <i></i> <span id="deviceText">자동 감지됨</span>
+    </div>
+</header>
+
+<!-- 2. 반응형 앱 뷰포트 -->
+<main class="viewport-container">
+    <iframe id="appFrame" title="SkyCommand & Nalyeo-Deuryeo Application Frame"></iframe>
+</main>
+
+<script>
+// URL 쿼리 파라미터(project_code, token, view) 파싱
+const urlParams = new URLSearchParams(window.location.search);
+const requestedView = urlParams.get('view');
+const querySuffix = window.location.search || '';
+
+// 스마트 기기 자동 판별
+const isMobileDevice = /Android|iPhone|iPad|iPod|Mobile|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 850;
+
+const frame = document.getElementById('appFrame');
+const btnPC = document.getElementById('btnPC');
+const btnMobile = document.getElementById('btnMobile');
+const btnCamera = document.getElementById('btnCamera');
+const deviceText = document.getElementById('deviceText');
+
+function switchView(viewName) {
+    btnPC.classList.toggle('active', viewName === 'pc');
+    btnMobile.classList.toggle('active', viewName === 'mobile');
+    btnCamera.classList.toggle('active', viewName === 'camera');
+
+    if (isMobileDevice) {
+        window.location.href = viewName + '.html' + querySuffix;
+        return;
+    }
+
+    if (viewName === 'pc') {
+        frame.src = 'pc.html' + querySuffix;
+        deviceText.textContent = 'PC 관제 모드';
+    } else if (viewName === 'mobile') {
+        frame.src = 'mobile.html' + querySuffix;
+        deviceText.textContent = '모바일 도우미 모드';
+    } else if (viewName === 'camera') {
+        frame.src = 'camera.html' + querySuffix;
+        deviceText.textContent = '카메라 촬영 모드';
+    }
+}
+
+// 초기 로딩: 쿼리 우선 -> 기기 판별 순서로 자동 결정
+if (requestedView === 'camera') {
+    switchView('camera');
+} else if (requestedView === 'pc') {
+    switchView('pc');
+} else if (requestedView === 'mobile') {
+    switchView('mobile');
+} else {
+    // 자동 판별 모드: 스마트폰 접속 시 아이프레임 뷰포트 버그(검은 화면) 방지를 위해 네이티브 모바일 화면으로 즉시 전환
+    if (isMobileDevice) {
+        window.location.replace('mobile.html' + querySuffix);
+    } else {
+        switchView('pc');
+        deviceText.textContent = '💻 PC 자동 감지';
+    }
+}
+</script>
+</body>
+</html>

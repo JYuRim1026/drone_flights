@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Sky Command - 드론원스톱 비행승인 자동입력 도우미",
+  "version": "1.0.0",
+  "description": "Sky Command AI와 연동하여 드론원스톱 비행승인 신청서를 자동으로 로그인 및 입력합니다.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://drone.onestop.go.kr/*",
+    "http://localhost:8501/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Sky Command 드론원스톱 도우미"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://localhost:8501/*"],
+      "js": ["content_skycommand.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://drone.onestop.go.kr/*"],
+      "js": ["content_onestop.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
