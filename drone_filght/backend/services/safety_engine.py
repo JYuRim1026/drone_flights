@@ -71,7 +71,7 @@ class FlightSafetyEngine:
                 step_results={
                     "location_check": {
                         "query": location_str,
-                        "resolved_address": "주소 미확인",
+                        "resolved_address": loc_res.get("address") or "주소를 불러올 수 없습니다. 상세 주소나 주변 랜드마크를 포함하여 다시 입력해주세요.",
                         "latitude": None,
                         "longitude": None,
                         "source": loc_res.get("source", "위치 확인 실패"),
@@ -120,7 +120,7 @@ class FlightSafetyEngine:
                 flight_location={
                     "input_name": location_str,
                     "name": location_str,
-                    "address": "",
+                    "address": loc_res.get("address") or "주소를 불러올 수 없습니다. 상세 주소나 주변 랜드마크를 포함하여 다시 입력해주세요.",
                     "latitude": None,
                     "longitude": None,
                     "source": loc_res.get("source", "위치 검색 실패"),
