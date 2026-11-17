@@ -1363,26 +1363,21 @@ button { cursor: pointer; }
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
               <div style="display:flex; align-items:center; gap:8px;">
                 <strong style="font-size:14px; color:var(--navy);">🗺️ 실시간 공역 관제 지도 (반경 500m 정밀 진단 구역)</strong>
-                <span id="mapModeBadge" style="font-size:11px; padding:2px 8px; border-radius:12px; font-weight:700; background:#dcfce7; color:#15803d; border:1px solid #bbf7d0;">드론원스톱 공식 비행공역 지도</span>
+                <span id="mapModeBadge" style="font-size:11px; padding:2px 8px; border-radius:12px; font-weight:700; background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;">브이월드 실시간 진단 맵</span>
               </div>
               <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                <button type="button" class="quick-btn" id="btnModeOnestop" style="padding:5px 12px; font-size:11px; font-weight:bold; background:#1e40af; color:#fff;" onclick="switchMapMode('onestop')">🛸 드론원스톱 전국 공역 지도</button>
-                <button type="button" class="quick-btn" id="btnModeLeaflet" style="padding:5px 12px; font-size:11px; background:#fff; color:#1e293b;" onclick="switchMapMode('leaflet')">📍 검색 위치 & 반경 500m 맵</button>
-                <span id="leafletSubControls" style="display:none; align-items:center; gap:4px;">
-                  <button type="button" class="quick-btn" id="btnLayerVworldBase" style="padding:4px 8px; font-size:10px;" onclick="setMapLayer('vworldBase')">2D</button>
-                  <button type="button" class="quick-btn" id="btnLayerVworldSat" style="padding:4px 8px; font-size:10px;" onclick="setMapLayer('vworldSat')">위성</button>
-                  <button type="button" class="quick-btn" id="btnLayerBackup" style="padding:4px 8px; font-size:10px;" onclick="setMapLayer('backup')">백업</button>
-                  <button type="button" class="quick-btn" id="btnVworldKeyConfig" style="padding:4px 8px; font-size:10px;" onclick="promptVworldApiKey()" title="VWorld API 키">🔑</button>
+                <span id="leafletSubControls" style="display:inline-flex; align-items:center; gap:4px;">
+                  <button type="button" class="quick-btn" id="btnLayerVworldBase" style="padding:4px 10px; font-size:11px; font-weight:bold; background:#1e40af; color:#fff;" onclick="setMapLayer('vworldBase')">2D 지도</button>
+                  <button type="button" class="quick-btn" id="btnLayerVworldSat" style="padding:4px 10px; font-size:11px; background:#fff; color:#1e293b;" onclick="setMapLayer('vworldSat')">위성 영상</button>
+                  <button type="button" class="quick-btn" id="btnLayerBackup" style="padding:4px 10px; font-size:11px; background:#fff; color:#1e293b;" onclick="setMapLayer('backup')">백업 맵</button>
+                  <button type="button" class="quick-btn" id="btnVworldKeyConfig" style="padding:4px 8px; font-size:11px;" onclick="promptVworldApiKey()" title="VWorld API 키">🔑 키설정</button>
                 </span>
-                <a href="https://drone.onestop.go.kr/common/flightArea" target="_blank" style="font-size:11px; color:var(--blue); text-decoration:none; font-weight:700;">🌐 크게보기 ↗</a>
+                <a href="https://drone.onestop.go.kr/common/flightArea" target="_blank" style="font-size:11px; color:var(--blue); text-decoration:none; font-weight:700;">🌐 드론원스톱 공식 지도 ↗</a>
               </div>
             </div>
             <div id="mapContainer">
-              <!-- Mode 1: 드론원스톱 공식 비행구역 지도 (실시간 공역 WMS, P-518, P-73, R구역, 관제권 등 공식 레이어 내장 / 하단 불필요 표 제거 깔끔 모드) -->
-              <iframe id="onestopMapFrame" src="./onestop_clean_map.html" scrolling="no" style="width:100%; height:100%; border:none; display:block; overflow:hidden;" title="국토교통부 드론원스톱 공식 비행구역 지도" allow="geolocation"></iframe>
-
-              <!-- Mode 2: Leaflet VWorld 자체 맵 (반경 1km 표시용) -->
-              <div id="leafletMapInner" style="width:100%; height:100%; display:none; position:relative;">
+              <!-- Leaflet VWorld 자체 맵 (반경 500m 정밀 진단) -->
+              <div id="leafletMapInner" style="width:100%; height:100%; display:block; position:relative;">
                 <div class="map-legend">
                   <b>🌐 드론원스톱 공식 범례</b><br>
                   <span class="legend-dot" style="background:#dc2626;"></span> 🔴 P: 비행금지구역<br>
@@ -3068,67 +3063,19 @@ function openDocInNewTab() {
 /* -------------------------------------------------------------
  * 4. Interactive Map & Diagnosis Logic (View 1) - VWorld & Drone One-Stop Integration
  * ------------------------------------------------------------- */
-let currentMapMode = 'onestop'; // 'onestop' (default) or 'leaflet'
+let currentMapMode = 'leaflet'; // Leaflet VWorld Map
 let currentTileLayer = null;
 let currentTileLayerType = 'vworldBase'; // 'vworldBase', 'vworldSat', 'backup'
 let vworldApiKey = localStorage.getItem('vworld_api_key') || '';
 
 function switchMapMode(mode) {
-  currentMapMode = mode;
-  const frame = $('onestopMapFrame');
+  currentMapMode = 'leaflet';
   const leafletDiv = $('leafletMapInner');
-  const btnOne = $('btnModeOnestop');
-  const btnLeaf = $('btnModeLeaflet');
-  const subControls = $('leafletSubControls');
-  const badge = $('mapModeBadge');
-
-  if (mode === 'onestop') {
-    if (frame) frame.style.display = 'block';
-    if (leafletDiv) leafletDiv.style.display = 'none';
-    if (btnOne) {
-      btnOne.style.background = '#1e40af';
-      btnOne.style.color = '#fff';
-      btnOne.style.fontWeight = 'bold';
-    }
-    if (btnLeaf) {
-      btnLeaf.style.background = '#fff';
-      btnLeaf.style.color = '#1e293b';
-      btnLeaf.style.fontWeight = 'normal';
-    }
-    if (subControls) subControls.style.display = 'none';
-    if (badge) {
-      badge.textContent = '드론원스톱 공식 비행공역 지도';
-      badge.style.background = '#dcfce7';
-      badge.style.color = '#15803d';
-      badge.style.borderColor = '#bbf7d0';
-    }
-    toast('대한민국 드론원스톱 공식 비행공역 지도를 불러왔습니다.');
+  if (leafletDiv) leafletDiv.style.display = 'block';
+  if (!mapInstance) {
+    initMap();
   } else {
-    if (frame) frame.style.display = 'none';
-    if (leafletDiv) leafletDiv.style.display = 'block';
-    if (btnLeaf) {
-      btnLeaf.style.background = '#1e40af';
-      btnLeaf.style.color = '#fff';
-      btnLeaf.style.fontWeight = 'bold';
-    }
-    if (btnOne) {
-      btnOne.style.background = '#fff';
-      btnOne.style.color = '#1e293b';
-      btnOne.style.fontWeight = 'normal';
-    }
-    if (subControls) subControls.style.display = 'inline-flex';
-    if (badge) {
-      badge.textContent = 'VWorld 자체 진단 맵';
-      badge.style.background = '#e0f2fe';
-      badge.style.color = '#0369a1';
-      badge.style.borderColor = '#bae6fd';
-    }
-    if (!mapInstance) {
-      initMap();
-    } else {
-      setTimeout(() => mapInstance.invalidateSize(), 150);
-    }
-    toast('VWorld Leaflet 자체 진단 지도로 전환했습니다.');
+    setTimeout(() => mapInstance.invalidateSize(), 150);
   }
 }
 

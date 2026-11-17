@@ -7,7 +7,6 @@
     { "source": "/pc", "destination": "/drone_filght/frontend/pc.html" },
     { "source": "/mobile", "destination": "/drone_filght/frontend/mobile.html" },
     { "source": "/camera", "destination": "/drone_filght/frontend/camera.html" },
-    { "source": "/onestop_clean_map.html", "destination": "/drone_filght/frontend/onestop_clean_map.html" },
     { "source": "/(.*)", "destination": "/drone_filght/frontend/$1" }
   ]
 }
