@@ -1091,7 +1091,14 @@ async function submitAuthForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, username: email })
       });
-      const data = await resp.json();
+      let data = {};
+      try {
+        data = await resp.json();
+      } catch (jsonErr) {
+        if (!resp.ok) {
+          throw new Error(`서버 응답 오류 (${resp.status}): 백엔드 서버 상태를 확인해주세요.`);
+        }
+      }
       if (!resp.ok) {
         throw new Error(data.detail || '로그인에 실패했습니다. 아이디와 비밀번호를 확인해주세요.');
       }
@@ -1113,7 +1120,14 @@ async function submitAuthForm() {
           drone_weight_g: 249
         })
       });
-      const data = await resp.json();
+      let data = {};
+      try {
+        data = await resp.json();
+      } catch (jsonErr) {
+        if (!resp.ok) {
+          throw new Error(`서버 응답 오류 (${resp.status}): 백엔드 서버 상태를 확인해주세요.`);
+        }
+      }
       if (!resp.ok) {
         throw new Error(data.detail || '회원가입에 실패했습니다.');
       }

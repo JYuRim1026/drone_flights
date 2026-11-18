@@ -13,7 +13,24 @@ class Settings:
     
     # Database: SQLite for local out-of-the-box demo, PostgreSQL ready
     _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    _DEFAULT_DB = os.path.join(_BASE_DIR, "sky_command.db").replace("\\", "/")
+    _SOURCE_DB = os.path.join(_BASE_DIR, "sky_command.db")
+    
+    # In Vercel serverless / Lambda environment, the app bundle is read-only.
+    # Copy database to system temp directory so SQLite can read and write without "readonly database" errors.
+    if os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
+        import tempfile
+        import shutil
+        _TMP_DIR = tempfile.gettempdir()
+        _TMP_DB = os.path.join(_TMP_DIR, "sky_command.db").replace("\\", "/")
+        try:
+            if os.path.exists(_SOURCE_DB) and not os.path.exists(_TMP_DB):
+                shutil.copy2(_SOURCE_DB, _TMP_DB)
+        except Exception:
+            pass
+        _DEFAULT_DB = _TMP_DB
+    else:
+        _DEFAULT_DB = _SOURCE_DB.replace("\\", "/")
+
     DATABASE_URL: str = os.getenv("DATABASE_URL", f"sqlite:///{_DEFAULT_DB}")
     
     # JWT & Security Configuration

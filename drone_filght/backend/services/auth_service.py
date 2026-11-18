@@ -150,6 +150,15 @@ class AuthService:
         """
         default_accounts = [
             {
+                "username": "aaa@test.com",
+                "email": "aaa@test.com",
+                "full_name": "홍길동",
+                "password": "a123456",
+                "role": "pilot",
+                "drone_model": "DJI Mavic 3 Pro",
+                "drone_weight_g": 958
+            },
+            {
                 "username": "pilot",
                 "email": "pilot_pc@skycommand.kr",
                 "full_name": "스카이 조종사 (PC 관제)",

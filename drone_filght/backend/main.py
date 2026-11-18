@@ -40,9 +40,6 @@ from backend.routers import (
 )
 from backend.services.auth_service import auth_service
 
-# Initialize Database Tables
-Base.metadata.create_all(bind=engine)
-
 def seed_initial_data():
     """Initial Seed Data for Demo & Report Testing"""
     db = SessionLocal()
@@ -164,8 +161,17 @@ def seed_initial_data():
             db.add_all(zones)
             db.commit()
 
+    except Exception as _seed_err:
+        print(f"Notice: Seed initial data warning (deferred): {_seed_err}")
     finally:
         db.close()
+
+# Initialize Database Tables & Seed data on module load (Ensures tables & users exist in serverless)
+try:
+    Base.metadata.create_all(bind=engine)
+    seed_initial_data()
+except Exception as _init_err:
+    print(f"Notice: Immediate DB initialization warning: {_init_err}")
 
 
 @asynccontextmanager
@@ -201,17 +207,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include Routers
-app.include_router(pc_router, prefix=settings.API_V1_STR)
-app.include_router(mobile_router, prefix=settings.API_V1_STR)
-app.include_router(common_router, prefix=settings.API_V1_STR)
-app.include_router(external_router, prefix=settings.API_V1_STR)
-app.include_router(ai_router, prefix=settings.API_V1_STR)
-app.include_router(safety_router, prefix=settings.API_V1_STR)
-app.include_router(sync_router, prefix=settings.API_V1_STR)
-app.include_router(auth_router, prefix=settings.API_V1_STR)
-app.include_router(drones_router, prefix=settings.API_V1_STR)
-app.include_router(community_router, prefix=settings.API_V1_STR)
+# Include Routers with multiple prefixes for maximum frontend & proxy compatibility
+_api_routers = [
+    pc_router,
+    mobile_router,
+    common_router,
+    external_router,
+    ai_router,
+    safety_router,
+    sync_router,
+    auth_router,
+    drones_router,
+    community_router
+]
+for _r in _api_routers:
+    app.include_router(_r, prefix="/api")       # Standard /api/auth/login
+    app.include_router(_r, prefix="/api/v1")    # Mobile /api/v1/auth/login
+    app.include_router(_r)                      # Fallback /auth/login (if proxy strips /api)
+
 app.include_router(gateway_router)  # 단일 대표 URL: /app, /launch, /app/select
 
 @app.get("/", tags=["System Health"])
