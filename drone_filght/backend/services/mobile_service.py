@@ -110,14 +110,17 @@ class MobileService:
 
     @staticmethod
     def save_analysis_result(db: Session, res_in: AnalysisResultCreate) -> ShootingAnalysis:
+        coords = {"offset_x": res_in.offset_x, "offset_y": res_in.offset_y, "guide_direction": res_in.guide_direction}
         analysis = ShootingAnalysis(
             project_id=res_in.project_id,
-            frame_score=res_in.frame_score,
-            guide_direction=res_in.guide_direction,
-            offset_x=res_in.offset_x,
-            offset_y=res_in.offset_y,
+            analysis_status="completed",
+            target_summary=res_in.guide_direction or "피사체 인식",
+            environment_summary=res_in.guide_message,
+            recommended_composition="AI 맞춤 추천 구도",
+            target_coordinates=coords,
+            composition_score=float(res_in.frame_score or 0),
             guide_message=res_in.guide_message,
-            recorded_video_url=res_in.recorded_video_url
+            representative_image_path=res_in.recorded_video_url
         )
         db.add(analysis)
         db.commit()

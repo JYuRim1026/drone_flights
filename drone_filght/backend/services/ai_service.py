@@ -372,23 +372,25 @@ class AIService:
             badge_color = "#e9a34b"
             ui_msg = "카메라를 아래쪽(↓)으로 틸트하세요. 수평선 피사체가 상단에 치우쳐 있습니다."
 
-        # 3. 데이터베이스 저장 (shooting_analyses)
+        # 3. 데이터베이스 저장 (shooting_analyses - AI 최종 분석 결과 저장)
         saved_id = None
         if db:
             try:
                 analysis_record = ShootingAnalysis(
                     project_id=project_id,
-                    frame_score=frame_score,
-                    guide_direction=mobile_dir,
-                    offset_x=offset_x,
-                    offset_y=offset_y,
+                    analysis_status="completed",
+                    target_summary=rec.subject,
+                    environment_summary=rec.reason,
+                    recommended_composition=rec.composition,
+                    target_coordinates={"offset_x": offset_x, "offset_y": offset_y, "guide_direction": mobile_dir},
+                    composition_score=float(frame_score),
                     guide_message=f"[{rec.subject}] {rec.reason}",
-                    recorded_video_url=None
+                    representative_image_path=None
                 )
                 db.add(analysis_record)
                 db.commit()
                 db.refresh(analysis_record)
-                saved_id = analysis_record.id
+                saved_id = analysis_record.analysis_id
             except Exception:
                 db.rollback()
 

@@ -9,11 +9,9 @@ from backend.models.models import (
     Video,
     SurveyPreference,
     UserPreferenceScore,
-    Interaction
+    Interaction,
+    ShootingAnalysis
 )
-
-# 기존 shooting_analyses 통합에 따른 호환용 별칭
-ShootingAnalysis = ShootingProject
 
 __all__ = [
     "User",

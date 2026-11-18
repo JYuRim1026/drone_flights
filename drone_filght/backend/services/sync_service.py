@@ -260,14 +260,21 @@ class SyncService:
                 detail="타인의 프로젝트에 결과를 업로드할 수 없습니다. 유효한 보안 토큰(?token=...)이 필요합니다."
             )
 
+        coords = {
+            "offset_x": result_in.offset_x,
+            "offset_y": result_in.offset_y,
+            "guide_direction": result_in.guide_direction
+        }
         record = ShootingAnalysis(
             project_id=proj.id,
-            frame_score=result_in.frame_score,
-            offset_x=result_in.offset_x,
-            offset_y=result_in.offset_y,
-            guide_direction=result_in.guide_direction,
+            analysis_status="completed",
+            target_summary=result_in.guide_direction or "피사체 인식 완료",
+            environment_summary=result_in.guide_message,
+            recommended_composition="AI 맞춤 추천 구도",
+            target_coordinates=coords,
+            composition_score=float(result_in.frame_score or 0),
             guide_message=result_in.guide_message,
-            recorded_video_url=result_in.recorded_video_url
+            representative_image_path=result_in.recorded_video_url
         )
         db.add(record)
 

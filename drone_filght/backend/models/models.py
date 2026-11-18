@@ -171,6 +171,7 @@ class ShootingProject(Base):
     # 관계 설정
     user = relationship("User", back_populates="shooting_projects")
     flight_request = relationship("FlightRequest", back_populates="projects")
+    analyses = relationship("ShootingAnalysis", back_populates="project", cascade="all, delete-orphan")
 
 
 # ==========================================
@@ -309,6 +310,26 @@ class Interaction(Base):
 
 
 # ==========================================
-# 기존 shooting_analyses 통합에 따른 호환용 별칭
+# 11. shooting_analyses — 모바일 카메라 실시간 영상 최종 분석 결과 저장
 # ==========================================
-ShootingAnalysis = ShootingProject
+class ShootingAnalysis(Base):
+    __tablename__ = "shooting_analyses"
+
+    analysis_id = Column(Integer, primary_key=True, autoincrement=True, index=True)
+    project_id = Column(Integer, ForeignKey("shooting_projects.project_id", ondelete="CASCADE"), nullable=False, index=True)
+    analysis_status = Column(String(50), default="completed", nullable=False)
+    target_summary = Column(Text, nullable=True)
+    environment_summary = Column(Text, nullable=True)
+    recommended_composition = Column(String(100), nullable=True)
+    target_coordinates = Column(JSON, nullable=True)
+    composition_score = Column(Float, nullable=True)
+    guide_message = Column(Text, nullable=True)
+    representative_image_path = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    id = synonym("analysis_id")
+    frame_score = synonym("composition_score")
+    recorded_video_url = synonym("representative_image_path")
+
+    # 관계 설정 (N:1 with ShootingProject)
+    project = relationship("ShootingProject", back_populates="analyses")
