@@ -1,12 +1,26 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
   "cleanUrls": true,
-  "trailingSlash": false,
+  "services": {
+    "frontend": {
+      "root": "drone_filght/frontend"
+    },
+    "backend": {
+      "root": "drone_filght/backend",
+      "framework": "fastapi",
+      "entrypoint": "main:app"
+    }
+  },
   "rewrites": [
-    { "source": "/", "destination": "/drone_filght/frontend/index.html" },
-    { "source": "/pc", "destination": "/drone_filght/frontend/pc.html" },
-    { "source": "/mobile", "destination": "/drone_filght/frontend/mobile.html" },
-    { "source": "/camera", "destination": "/drone_filght/frontend/camera.html" },
-    { "source": "/(.*)", "destination": "/drone_filght/frontend/$1" }
+    { "source": "/api", "destination": { "service": "backend" } },
+    { "source": "/api/(.*)", "destination": { "service": "backend" } },
+    { "source": "/docs", "destination": { "service": "backend" } },
+    { "source": "/openapi.json", "destination": { "service": "backend" } },
+    { "source": "/pc", "destination": { "service": "frontend", "path": "/pc.html" } },
+    { "source": "/mobile", "destination": { "service": "frontend", "path": "/mobile.html" } },
+    { "source": "/camera", "destination": { "service": "frontend", "path": "/camera.html" } },
+    { "source": "/", "destination": { "service": "frontend", "path": "/index.html" } },
+    { "source": "/(.*)", "destination": { "service": "frontend" } }
   ]
 }

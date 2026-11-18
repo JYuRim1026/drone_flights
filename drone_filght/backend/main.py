@@ -1,3 +1,23 @@
+import sys
+import os
+from pathlib import Path
+
+# Vercel Serverless 및 다중 환경 sys.path 및 backend 패키지 자동 보정
+_CUR_DIR = Path(__file__).resolve().parent
+_PARENT_DIR = _CUR_DIR.parent
+for _p in [str(_PARENT_DIR), str(_CUR_DIR), str(_PARENT_DIR.parent)]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+if "backend" not in sys.modules:
+    try:
+        import backend
+    except ModuleNotFoundError:
+        import types
+        _pkg = types.ModuleType("backend")
+        _pkg.__path__ = [str(_CUR_DIR)]
+        sys.modules["backend"] = _pkg
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
