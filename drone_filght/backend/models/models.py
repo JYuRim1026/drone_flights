@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Text, ForeignKey, JSON
+from sqlalchemy import Column, Integer, BigInteger, String, Float, Boolean, DateTime, Text, ForeignKey, JSON
 from sqlalchemy.orm import relationship, synonym
 from datetime import datetime
 from backend.database import Base
@@ -34,6 +34,11 @@ class User(Base):
     shooting_projects = relationship("ShootingProject", back_populates="user", cascade="all, delete-orphan")
     flight_guide_logs = relationship("FlightGuideLog", back_populates="user", cascade="all, delete-orphan")
     registered_drones = relationship("RegisteredDrone", back_populates="user", cascade="all, delete-orphan")
+
+    # 커뮤니티 선호도 및 상호작용 관계 (1:N survey_preferences, 1:N preference_scores, 1:N interactions)
+    survey_preferences = relationship("SurveyPreference", back_populates="user", cascade="all, delete-orphan")
+    preference_scores = relationship("UserPreferenceScore", back_populates="user", cascade="all, delete-orphan")
+    interactions = relationship("Interaction", back_populates="user", cascade="all, delete-orphan")
 
 
 # ==========================================
@@ -223,6 +228,78 @@ class RegisteredDrone(Base):
 
     # 관계 설정 (N:1 with User)
     user = relationship("User", back_populates="registered_drones")
+
+
+# ==========================================
+# 8. videos — 커뮤니티 영상 정보
+# ==========================================
+class Video(Base):
+    __tablename__ = "videos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(Text, nullable=False)
+    url = Column(Text, nullable=True)
+    background = Column(Text, nullable=True)     # 배경 (도시/수변, 자연/산악, 바다/해안 등)
+    time_slot = Column(Text, nullable=True)      # 촬영 시간대 (주간, 골든아워, 일몰, 야간 등)
+    composition = Column(Text, nullable=True)    # 구도 (와이드 트래킹, 오빗, 버드아이 등)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # 관계 설정 (1:N with interactions)
+    interactions = relationship("Interaction", back_populates="video", cascade="all, delete-orphan")
+
+
+# ==========================================
+# 9. survey_preferences — 최초 설문 응답 (카테고리별 선호도)
+# ==========================================
+class SurveyPreference(Base):
+    __tablename__ = "survey_preferences"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=False, index=True)
+    category = Column(Text, nullable=False)      # category (background, time_slot, composition 등)
+    value = Column(Text, nullable=False)         # value (바다, 골든아워, 오빗 등)
+    strength = Column(Float, default=1.0)        # strength (선호 강도)
+
+    # 관계 설정 (N:1 with users)
+    user = relationship("User", back_populates="survey_preferences")
+
+
+# ==========================================
+# 10. user_preference_scores — 계산된 사용자별 선호도 점수
+# ==========================================
+class UserPreferenceScore(Base):
+    __tablename__ = "user_preference_scores"
+
+    preference_id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=False, index=True)
+    category = Column(Text, nullable=False)             # category
+    preference_value = Column(Text, nullable=False)     # preference_value
+    preference_score = Column(Float, default=0.0)       # preference_score
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # 호환성 synonym
+    id = synonym("preference_id")
+
+    # 관계 설정 (N:1 with users)
+    user = relationship("User", back_populates="preference_scores")
+
+
+# ==========================================
+# 11. interactions — 영상 조회·좋아요·저장 이력
+# ==========================================
+class Interaction(Base):
+    __tablename__ = "interactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=False, index=True)
+    video_id = Column(Integer, ForeignKey("videos.id"), nullable=False, index=True)
+    event_type = Column(Text, nullable=False)           # 'view', 'like', 'save', 'share'
+    active = Column(Integer, default=1)                 # 1: 활성, 0: 취소/비활성
+    occurred_at = Column(DateTime, default=datetime.utcnow)
+
+    # 관계 설정 (N:1 with users, N:1 with videos)
+    user = relationship("User", back_populates="interactions")
+    video = relationship("Video", back_populates="interactions")
 
 
 # ==========================================

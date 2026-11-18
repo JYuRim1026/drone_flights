@@ -5,7 +5,11 @@ from backend.models.models import (
     AirspaceZone,
     ShootingProject,
     FlightGuideLog,
-    RegisteredDrone
+    RegisteredDrone,
+    Video,
+    SurveyPreference,
+    UserPreferenceScore,
+    Interaction
 )
 
 # 기존 shooting_analyses 통합에 따른 호환용 별칭
@@ -19,5 +23,9 @@ __all__ = [
     "ShootingProject",
     "FlightGuideLog",
     "RegisteredDrone",
+    "Video",
+    "SurveyPreference",
+    "UserPreferenceScore",
+    "Interaction",
     "ShootingAnalysis"
 ]
