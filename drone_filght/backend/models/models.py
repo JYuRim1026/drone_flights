@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, BigInteger, String, Float, Boolean, DateTime, Text, ForeignKey, JSON
+from sqlalchemy import Column, Integer, BigInteger, String, Float, Boolean, DateTime, Text, ForeignKey, JSON, UniqueConstraint
 from sqlalchemy.orm import relationship, synonym
 from datetime import datetime
 from backend.database import Base
@@ -253,6 +253,9 @@ class Video(Base):
 # ==========================================
 class SurveyPreference(Base):
     __tablename__ = "survey_preferences"
+    __table_args__ = (
+        UniqueConstraint("user_id", "category", "value", name="uq_survey_user_cat_val"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=False, index=True)
@@ -269,6 +272,9 @@ class SurveyPreference(Base):
 # ==========================================
 class UserPreferenceScore(Base):
     __tablename__ = "user_preference_scores"
+    __table_args__ = (
+        UniqueConstraint("user_id", "category", "preference_value", name="uq_pref_user_cat_val"),
+    )
 
     preference_id = Column(Integer, primary_key=True, index=True)
     user_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=False, index=True)

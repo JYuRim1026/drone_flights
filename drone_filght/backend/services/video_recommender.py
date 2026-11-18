@@ -393,6 +393,57 @@ class VideoRecommender:
             self.refresh_preference_scores(db, user_id)
 
     # ---------------------------------
+    # 5-1. 직관적인 상호작용 액션 라우팅
+    # (조회, 좋아요, 좋아요 취소, 저장, 저장 취소)
+    # ---------------------------------
+
+    def record_interaction(self, user_id, video_id, action):
+        """
+        사용자 행동 액션:
+        - 'view': 영상 조회 (조회수 1 증가)
+        - 'like': 좋아요 반영
+        - 'unlike': 좋아요 취소 반영
+        - 'save': 저장(북마크) 반영
+        - 'unsave': 저장 취소 반영
+        """
+        action_map = {
+            "view": ("view", True),
+            "like": ("like", True),
+            "unlike": ("like", False),
+            "save": ("save", True),
+            "unsave": ("save", False)
+        }
+
+        if action not in action_map:
+            raise ValueError(f"지원하지 않는 액션입니다: {action}. ('view', 'like', 'unlike', 'save', 'unsave' 가능)")
+
+        event_type, active = action_map[action]
+        self.record_event(user_id, video_id, event_type, active)
+        return self.get_video_stats(user_id, video_id)
+
+    def get_video_stats(self, user_id, video_id):
+        """특정 영상의 최신 통계(조회수, 좋아요수, 저장수 및 현재 사용자 상태) 조회"""
+        with self.connect() as db:
+            self.check_user(db, user_id)
+            v_cnt = db.execute("SELECT COUNT(*) FROM interactions WHERE video_id = ? AND event_type = 'view'", (video_id,)).fetchone()[0]
+            l_cnt = db.execute("SELECT COUNT(*) FROM interactions WHERE video_id = ? AND event_type = 'like' AND active = 1", (video_id,)).fetchone()[0]
+            s_cnt = db.execute("SELECT COUNT(*) FROM interactions WHERE video_id = ? AND event_type = 'save' AND active = 1", (video_id,)).fetchone()[0]
+
+            is_l = db.execute("SELECT 1 FROM interactions WHERE user_id = ? AND video_id = ? AND event_type = 'like' AND active = 1", (user_id, video_id)).fetchone() is not None
+            is_s = db.execute("SELECT 1 FROM interactions WHERE user_id = ? AND video_id = ? AND event_type = 'save' AND active = 1", (user_id, video_id)).fetchone() is not None
+            is_v = db.execute("SELECT 1 FROM interactions WHERE user_id = ? AND video_id = ? AND event_type = 'view'", (user_id, video_id)).fetchone() is not None
+
+            return {
+                "video_id": video_id,
+                "views_count": v_cnt,
+                "likes_count": l_cnt,
+                "saves_count": s_cnt,
+                "is_liked": is_l,
+                "is_saved": is_s,
+                "is_viewed": is_v
+            }
+
+    # ---------------------------------
     # 6. 사용자 선호도 점수 갱신
     # ---------------------------------
 
@@ -573,12 +624,18 @@ class VideoRecommender:
         }
 
         popularity = {}
-
         viewed = set()
+        user_likes = set()
+        user_saves = set()
+        views_count = {}
+        likes_count = {}
+        saves_count = {}
 
         now = datetime.now(timezone.utc)
 
         for event in events:
+            vid = event["video_id"]
+            etype = event["event_type"]
 
             days = max(
                 0,
@@ -586,16 +643,27 @@ class VideoRecommender:
                 / 86400
             )
 
-            weight = EVENT_WEIGHTS[event["event_type"]]
+            weight = EVENT_WEIGHTS[etype]
 
-            popularity[event["video_id"]] = (
-                popularity.get(event["video_id"], 0)
+            popularity[vid] = (
+                popularity.get(vid, 0)
                 + weight * (0.5 ** (days / 30))
             )
 
+            if etype == "view":
+                views_count[vid] = views_count.get(vid, 0) + 1
+            elif etype == "like":
+                likes_count[vid] = likes_count.get(vid, 0) + 1
+                if event["user_id"] == user_id:
+                    user_likes.add(vid)
+            elif etype == "save":
+                saves_count[vid] = saves_count.get(vid, 0) + 1
+                if event["user_id"] == user_id:
+                    user_saves.add(vid)
+
             if event["user_id"] == user_id:
-                if event["event_type"] == "view":
-                    viewed.add(event["video_id"])
+                if etype == "view":
+                    viewed.add(vid)
 
         results = []
 
@@ -641,7 +709,12 @@ class VideoRecommender:
                 **dict(video),
                 "score": round(final_score, 4),
                 "popularity": round(pop, 4),
-                "is_viewed": video["id"] in viewed
+                "is_viewed": video["id"] in viewed,
+                "is_liked": video["id"] in user_likes,
+                "is_saved": video["id"] in user_saves,
+                "views_count": views_count.get(video["id"], 0),
+                "likes_count": likes_count.get(video["id"], 0),
+                "saves_count": saves_count.get(video["id"], 0)
             })
 
         if sort == "popular":

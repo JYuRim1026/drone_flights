@@ -8,6 +8,7 @@ from backend.routers.sync import router as sync_router
 from backend.routers.auth import router as auth_router
 from backend.routers.gateway import router as gateway_router
 from backend.routers.drones import router as drones_router
+from backend.routers.community import router as community_router
 
 __all__ = [
     "pc_router",
@@ -19,5 +20,6 @@ __all__ = [
     "sync_router",
     "auth_router",
     "gateway_router",
-    "drones_router"
+    "drones_router",
+    "community_router"
 ]
