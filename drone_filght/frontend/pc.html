@@ -2500,6 +2500,10 @@ async function loadUserDrones() {
     userDronesCache = drones;
     renderDroneCards(drones);
     if (countBadge) countBadge.textContent = `${drones.length}대`;
+    // 등록된 드론이 있으면 첫 번째 드론을 우측에 자동으로 표시
+    if (drones.length > 0 && !selectedDroneId) {
+      selectDroneForViewing(drones[0].drone_id);
+    }
   } catch(e) {
     if (container) {
       container.innerHTML = `
@@ -2512,11 +2516,14 @@ async function loadUserDrones() {
   }
 }
 
+let selectedDroneId = null;
+
 function renderDroneCards(drones) {
   const container = $('droneListContainer');
   if (!container) return;
 
   if (!drones || drones.length === 0) {
+    selectedDroneId = null;
     container.innerHTML = `
       <div style="text-align:center; padding:50px 20px; background:#f8fafc; border:1px dashed #cbd5e1; border-radius:12px;">
         <div style="font-size:36px; margin-bottom:8px;">🛸</div>
@@ -2527,13 +2534,18 @@ function renderDroneCards(drones) {
     return;
   }
 
-  container.innerHTML = drones.map(d => `
-    <div class="drone-item-card" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; padding:14px; display:flex; flex-direction:column; gap:8px; box-shadow:0 1px 3px rgba(0,0,0,0.04); transition:all 0.15s ease;">
+  container.innerHTML = drones.map(d => {
+    const isSelected = (selectedDroneId === d.drone_id);
+    return `
+    <div class="drone-item-card" data-drone-id="${d.drone_id}" onclick="selectDroneForViewing(${d.drone_id})" style="background:${isSelected ? '#f0f7ff' : '#ffffff'}; border:${isSelected ? '2px solid #2563eb' : '1px solid #e2e8f0'}; border-radius:12px; padding:14px; display:flex; flex-direction:column; gap:8px; box-shadow:${isSelected ? '0 4px 14px rgba(37,99,235,0.18)' : '0 1px 3px rgba(0,0,0,0.04)'}; cursor:pointer; transition:all 0.15s ease;">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
         <div style="display:flex; align-items:center; gap:8px;">
-          <div style="width:34px; height:34px; border-radius:10px; background:#eff6ff; color:#2563eb; display:grid; place-items:center; font-size:18px;">🛸</div>
+          <div style="width:36px; height:36px; border-radius:10px; background:${isSelected ? '#2563eb' : '#eff6ff'}; color:${isSelected ? '#ffffff' : '#2563eb'}; display:grid; place-items:center; font-size:18px;">🛸</div>
           <div>
-            <h4 style="margin:0; font-size:14px; font-weight:800; color:#0f172a;">${escapeHtml(d.model_name)}</h4>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <h4 style="margin:0; font-size:14px; font-weight:800; color:#0f172a;">${escapeHtml(d.model_name)}</h4>
+              <span class="selected-badge" style="display:${isSelected ? 'inline-block' : 'none'}; font-size:10px; font-weight:800; background:#2563eb; color:#fff; padding:1px 6px; border-radius:4px;">선택됨 ✓</span>
+            </div>
             <div style="font-size:11px; color:#64748b; margin-top:2px;">제조사: ${escapeHtml(d.manufacturer || '미입력')} · 자체중량: ${escapeHtml(d.takeoff_weight || '249g')}</div>
           </div>
         </div>
@@ -2552,16 +2564,19 @@ function renderDroneCards(drones) {
 
       ${d.description ? `<div style="font-size:11px; color:#64748b; line-height:1.4;">${escapeHtml(d.description)}</div>` : ''}
 
-      <div style="display:flex; justify-content:flex-end; gap:6px; margin-top:4px; padding-top:6px; border-top:1px solid #f1f5f9;">
-        <button type="button" onclick="editDrone(${d.drone_id})" style="background:#f1f5f9; color:#1e40af; border:1px solid #cbd5e1; border-radius:6px; padding:4px 10px; font-size:11px; font-weight:700; cursor:pointer;">
-          ✏ 수정
-        </button>
-        <button type="button" onclick="deleteDrone(${d.drone_id}, '${escapeHtml(d.model_name)}')" style="background:#fef2f2; color:#dc2626; border:1px solid #fecaca; border-radius:6px; padding:4px 10px; font-size:11px; font-weight:700; cursor:pointer;">
-          🗑 삭제
-        </button>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px; padding-top:6px; border-top:1px solid #f1f5f9;" onclick="event.stopPropagation()">
+        <span style="font-size:11px; color:#2563eb; font-weight:600;">👆 클릭하여 우측에서 상세 확인</span>
+        <div style="display:flex; gap:6px;">
+          <button type="button" onclick="selectDroneForViewing(${d.drone_id})" style="background:#f1f5f9; color:#1e40af; border:1px solid #cbd5e1; border-radius:6px; padding:4px 10px; font-size:11px; font-weight:700; cursor:pointer;">
+            ✏ 상세/수정
+          </button>
+          <button type="button" onclick="deleteDrone(${d.drone_id}, '${escapeHtml(d.model_name)}')" style="background:#fef2f2; color:#dc2626; border:1px solid #fecaca; border-radius:6px; padding:4px 10px; font-size:11px; font-weight:700; cursor:pointer;">
+            🗑 삭제
+          </button>
+        </div>
       </div>
     </div>
-  `).join('');
+  `}).join('');
 }
 
 function escapeHtml(str) {
@@ -2571,10 +2586,15 @@ function escapeHtml(str) {
   }[m]));
 }
 
-function editDrone(droneId) {
+function selectDroneForViewing(droneId) {
+  selectedDroneId = droneId;
   const drone = userDronesCache.find(d => d.drone_id === droneId);
   if (!drone) return;
 
+  // 좌측 카드 하이라이트 갱신
+  updateDroneCardHighlight();
+
+  // 우측 폼에 선택한 드론의 모든 정보 자동 채우기
   $('formDroneId').value = drone.drone_id;
   $('droneFieldType').value = drone.drone_type || '무인멀티콥터';
   $('droneFieldReportNumber').value = drone.report_number || '';
@@ -2592,26 +2612,60 @@ function editDrone(droneId) {
   $('droneFieldInsurance').value = drone.insurance_status || '가입';
   $('droneFieldDesc').value = drone.description || '';
 
-  $('droneFormTitle').innerHTML = `<span>✏️</span> 드론 정보 수정 (ID: #${drone.drone_id})`;
-  $('droneFormModeBadge').textContent = '기체 정보 수정 모드';
-  $('droneFormModeBadge').style.background = '#fef3c7';
-  $('droneFormModeBadge').style.color = '#b45309';
+  // 폼 헤더 및 뱃지 상태 변경
+  $('droneFormTitle').innerHTML = `<span>🛸</span> 드론 상세 정보 및 수정 (ID: #${drone.drone_id})`;
+  $('droneFormModeBadge').textContent = `기체 #${drone.drone_id} 상세 조회 중`;
+  $('droneFormModeBadge').style.background = '#e0f2fe';
+  $('droneFormModeBadge').style.color = '#0369a1';
   $('btnSaveDrone').innerHTML = '💾 수정 사항 저장';
 
-  toast(`'${drone.model_name}' 기체 정보를 수정 양식에 불러왔습니다.`);
+  const err = $('droneFormError');
+  if (err) err.style.display = 'none';
+
+  toast(`'${drone.model_name}' 기체 상세 정보를 우측에 표시했습니다.`);
+}
+
+function updateDroneCardHighlight() {
+  document.querySelectorAll('.drone-item-card').forEach(el => {
+    const id = parseInt(el.dataset.droneId, 10);
+    const badge = el.querySelector('.selected-badge');
+    const iconBox = el.querySelector('div > div > div:first-child');
+    if (id === selectedDroneId) {
+      el.style.border = '2px solid #2563eb';
+      el.style.background = '#f0f7ff';
+      el.style.boxShadow = '0 4px 14px rgba(37,99,235,0.18)';
+      if (badge) badge.style.display = 'inline-block';
+      if (iconBox) { iconBox.style.background = '#2563eb'; iconBox.style.color = '#ffffff'; }
+    } else {
+      el.style.border = '1px solid #e2e8f0';
+      el.style.background = '#ffffff';
+      el.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)';
+      if (badge) badge.style.display = 'none';
+      if (iconBox) { iconBox.style.background = '#eff6ff'; iconBox.style.color = '#2563eb'; }
+    }
+  });
+}
+
+function editDrone(droneId) {
+  selectDroneForViewing(droneId);
   $('droneFieldModelName')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function resetDroneForm() {
+  selectedDroneId = null;
+  updateDroneCardHighlight();
   $('droneForm').reset();
   $('formDroneId').value = '';
-  $('droneFormTitle').innerHTML = '<span>📝</span> 드론 정보 등록';
+  $('droneFormTitle').innerHTML = '<span>📝</span> 새 드론 정보 등록';
   $('droneFormModeBadge').textContent = '신규 등록 모드';
   $('droneFormModeBadge').style.background = '#f1f5f9';
   $('droneFormModeBadge').style.color = '#475569';
-  $('btnSaveDrone').innerHTML = '💾 드론 정보 저장';
+  $('btnSaveDrone').innerHTML = '💾 새 드론 정보 등록';
   const err = $('droneFormError');
   if (err) err.style.display = 'none';
+  toast('새 드론을 등록할 수 있도록 입력 양식을 초기화했습니다.');
+  $('droneFieldModelName')?.focus();
+  $('droneFieldModelName')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 async function handleDroneFormSubmit(e) {
