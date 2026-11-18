@@ -192,7 +192,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS Middleware (PC Web localhost & Mobile Web Netlify)
+# CORS Middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,

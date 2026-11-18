@@ -52,17 +52,16 @@ class Settings:
     CACHE_DEFAULT_TTL_AIRSPACE: int = 3600    # 1시간
     
     # Frontend Web App URLs for Smart Routing & QR Deep Linking
-    MOBILE_WEB_URL: str = os.getenv("MOBILE_WEB_URL", "https://chimerical-trifle-7e9011.netlify.app")
-    PC_WEB_URL: str = os.getenv("PC_WEB_URL", "https://chimerical-trifle-7e9011.netlify.app/pc.html")
+    MOBILE_WEB_URL: str = os.getenv("MOBILE_WEB_URL", "http://localhost:5500")
+    PC_WEB_URL: str = os.getenv("PC_WEB_URL", "http://localhost:5500/pc.html")
     
-    # CORS Origins (PC Web localhost, Mobile Web Netlify, etc.)
+    # CORS Origins (Local Web Server & Vercel Web Client)
     CORS_ORIGINS: List[str] = [
         "http://localhost:3000",       # Local Web Client
         "http://localhost:5500",       # Local Web Server
         "http://localhost:8000",       # Backend Swagger
         "http://127.0.0.1:5500",
         "http://127.0.0.1:8000",
-        "https://chimerical-trifle-7e9011.netlify.app", # Netlify Mobile Web
         "*"
     ]
 

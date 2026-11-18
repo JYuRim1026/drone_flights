@@ -64,7 +64,7 @@ def smart_app_gateway(
     [핵심 기능: 하나의 URL로 PC와 모바일 화면 자동 분기]
     사용자가 단 하나의 URL(`http://서버주소/app`)로 접속하면,
     서버가 접속 기기(User-Agent)를 초고속으로 판별하여:
-    - 📱 스마트폰/태블릿 ➔ 모바일 웹(Netlify camera.html / index.html)으로 자동 이동
+    - 📱 스마트폰/태블릿 ➔ 모바일 웹(camera.html / index.html)으로 자동 이동
     - 💻 PC/노트북 ➔ PC 관제 대시보드(pc.html)로 자동 이동
     """
     user_agent = request.headers.get("user-agent", "")
