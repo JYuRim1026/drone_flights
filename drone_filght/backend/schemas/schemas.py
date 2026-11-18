@@ -428,6 +428,57 @@ class FlightApprovalChatResponse(BaseModel):
     needs_date_confirmation: bool = False
 
 
+# ==========================================
+# 등록된 드론 (Registered Drone) 스키마
+# ==========================================
+class RegisteredDroneBase(BaseModel):
+    drone_type: Optional[str] = Field("무인멀티콥터", description="기체 종류 (무인비행기, 무인헬리콥터, 무인멀티콥터, 기타)")
+    report_number: Optional[str] = Field(None, description="신고번호")
+    model_name: str = Field(..., description="모델명 (필수)")
+    purpose: Optional[str] = Field("비영리", description="용도 (비영리 / 영리)")
+    manufacturer: Optional[str] = Field(None, description="제작자")
+    operation_type: Optional[str] = Field("비연구용", description="운용유형 (비연구용 / 연구용)")
+    specifications: Optional[str] = Field(None, description="규격")
+    takeoff_weight: Optional[str] = Field("249g", description="자체중량")
+    owner_name: Optional[str] = Field(None, description="소유자")
+    phone_number: Optional[str] = Field(None, description="전화번호")
+    safety_cert_number: Optional[str] = Field(None, description="안전성인증증번호")
+    cert_expiry_date: Optional[str] = Field(None, description="인증 유효기간")
+    insurance_status: Optional[str] = Field("가입", description="보험가입유무 (미가입 / 가입)")
+    description: Optional[str] = Field(None, description="상세설명")
+    serial_number: Optional[str] = Field(None, description="제작번호")
+
+class RegisteredDroneCreate(RegisteredDroneBase):
+    pass
+
+class RegisteredDroneUpdate(BaseModel):
+    drone_type: Optional[str] = None
+    report_number: Optional[str] = None
+    model_name: Optional[str] = None
+    purpose: Optional[str] = None
+    manufacturer: Optional[str] = None
+    operation_type: Optional[str] = None
+    specifications: Optional[str] = None
+    takeoff_weight: Optional[str] = None
+    owner_name: Optional[str] = None
+    phone_number: Optional[str] = None
+    safety_cert_number: Optional[str] = None
+    cert_expiry_date: Optional[str] = None
+    insurance_status: Optional[str] = None
+    description: Optional[str] = None
+    serial_number: Optional[str] = None
+
+class RegisteredDroneResponse(RegisteredDroneBase):
+    drone_id: int
+    user_id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+
 
 
 

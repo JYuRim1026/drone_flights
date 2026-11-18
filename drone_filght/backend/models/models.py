@@ -28,11 +28,12 @@ class User(Base):
     username = synonym("user_name")
     hashed_password = synonym("password_hash")
 
-    # 관계 설정 (1:1 user_settings, 1:N flight_requests, 1:N shooting_projects, 1:N flight_guide_logs)
+    # 관계 설정 (1:1 user_settings, 1:N flight_requests, 1:N shooting_projects, 1:N flight_guide_logs, 1:N registered_drones)
     settings = relationship("UserSetting", back_populates="user", uselist=False, cascade="all, delete-orphan")
     flight_requests = relationship("FlightRequest", back_populates="user", cascade="all, delete-orphan")
     shooting_projects = relationship("ShootingProject", back_populates="user", cascade="all, delete-orphan")
     flight_guide_logs = relationship("FlightGuideLog", back_populates="user", cascade="all, delete-orphan")
+    registered_drones = relationship("RegisteredDrone", back_populates="user", cascade="all, delete-orphan")
 
 
 # ==========================================
@@ -187,6 +188,41 @@ class FlightGuideLog(Base):
     # 관계 설정
     user = relationship("User", back_populates="flight_guide_logs")
     flight_request = relationship("FlightRequest", back_populates="guide_logs")
+
+
+# ==========================================
+# 7. registered_drones — 등록된 드론 관리 (1:N with users)
+# ==========================================
+class RegisteredDrone(Base):
+    __tablename__ = "registered_drones"
+
+    drone_id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False, index=True)
+
+    drone_type = Column(String(50), default="무인멀티콥터")     # 무인비행기, 무인헬리콥터, 무인멀티콥터, 기타
+    report_number = Column(String(100), nullable=True)         # 신고번호
+    model_name = Column(String(100), nullable=False)           # 모델명 (필수)
+    purpose = Column(String(50), default="비영리")              # 용도 (비영리 / 영리)
+    manufacturer = Column(String(100), nullable=True)          # 제작자
+    operation_type = Column(String(50), default="비연구용")     # 운용유형 (비연구용 / 연구용)
+    specifications = Column(String(100), nullable=True)        # 규격
+    takeoff_weight = Column(String(50), default="249g")        # 자체중량
+    owner_name = Column(String(100), nullable=True)            # 소유자
+    phone_number = Column(String(50), nullable=True)           # 전화번호
+    safety_cert_number = Column(String(100), nullable=True)    # 안전성인증증번호
+    cert_expiry_date = Column(String(50), nullable=True)       # 인증 유효기간
+    insurance_status = Column(String(50), default="가입")      # 보험가입유무 (미가입 / 가입)
+    description = Column(Text, nullable=True)                  # 상세설명
+    serial_number = Column(String(100), nullable=True)         # 제작번호
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # 호환성 synonym
+    id = synonym("drone_id")
+
+    # 관계 설정 (N:1 with User)
+    user = relationship("User", back_populates="registered_drones")
 
 
 # ==========================================

@@ -7,6 +7,7 @@ from backend.routers.safety import router as safety_router
 from backend.routers.sync import router as sync_router
 from backend.routers.auth import router as auth_router
 from backend.routers.gateway import router as gateway_router
+from backend.routers.drones import router as drones_router
 
 __all__ = [
     "pc_router",
@@ -17,5 +18,6 @@ __all__ = [
     "safety_router",
     "sync_router",
     "auth_router",
-    "gateway_router"
+    "gateway_router",
+    "drones_router"
 ]

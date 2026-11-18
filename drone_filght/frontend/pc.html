@@ -1278,6 +1278,11 @@ button { cursor: pointer; }
         <span class="ico">📷</span>
         <span class="nav-text">3. 촬영 도우미</span>
       </div>
+      <!-- 4번: 설정 및 드론 관리 (신규) -->
+      <div class="nav-item" id="navSettings">
+        <span class="ico">⚙</span>
+        <span class="nav-text">4. 설정 및 드론 관리</span>
+      </div>
       <!-- 신청서 미리보기 (클릭 시 새 탭 생성) -->
       <div class="nav-item" id="navDoc">
         <span class="ico">▤</span>
@@ -2145,6 +2150,203 @@ button { cursor: pointer; }
           </div>
         </div>
       </section>
+
+      <!-- ======================================================== -->
+      <!-- VIEW 4: 설정 및 드론 관리 (신규) -->
+      <!-- ======================================================== -->
+      <section id="viewSettings" class="view-section">
+        <div class="hero" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+          <div>
+            <div class="eyebrow">SETTINGS & DRONE FLEET MANAGEMENT</div>
+            <h1>설정 및 드론 관리</h1>
+            <p>보유 중인 드론 기체 정보를 등록하고 관리하세요. 비행 승인 신청서 작성 시 등록된 기체 정보를 즉시 연동할 수 있습니다.</p>
+          </div>
+          <div class="step-chip" style="background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe;">
+            등록 기체 현황: <b id="droneCountBadge" style="margin-left:4px;">0대</b>
+          </div>
+        </div>
+
+        <!-- 계정 연동 안내 배너 -->
+        <div id="droneAuthNotice" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:12px 18px; margin-bottom:20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="font-size:20px;">🛡️</span>
+            <div>
+              <div style="font-size:13px; font-weight:700; color:#0f172a;" id="droneAuthStatusText">로그인 상태 확인 중...</div>
+              <div style="font-size:11.5px; color:#64748b;">드론 정보는 로그인한 사용자의 고유 계정에만 안전하게 암호화 보관되며 다른 사용자에게 노출되지 않습니다.</div>
+            </div>
+          </div>
+          <button type="button" id="btnDroneGoLogin" onclick="openAuthModal('login')" class="quick-btn" style="display:none; background:#2563eb; color:#fff; font-weight:700; border-radius:8px; padding:6px 14px; font-size:12px; border:none; cursor:pointer;">
+            👤 로그인하기
+          </button>
+        </div>
+
+        <!-- 2열 그리드: 좌측(내 드론 목록), 우측(드론 등록/수정 폼) -->
+        <div style="display:grid; grid-template-columns: 1fr 1.15fr; gap:20px; align-items:start;">
+          
+          <!-- 좌측: 내 드론 목록 카드 -->
+          <div style="background:#ffffff; border:1px solid var(--line); border-radius:18px; padding:22px; box-shadow:var(--shadow);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid var(--line); padding-bottom:12px;">
+              <div>
+                <h3 style="margin:0; font-size:16px; font-weight:800; color:var(--navy); display:flex; align-items:center; gap:8px;">
+                  <span>🛸</span> 내 드론 목록
+                </h3>
+                <small style="color:var(--muted); font-size:11.5px;">등록된 드론을 선택하여 수정하거나 삭제할 수 있습니다.</small>
+              </div>
+              <button type="button" onclick="resetDroneForm()" style="background:#eff6ff; color:#2563eb; border:1px solid #bfdbfe; font-size:12px; font-weight:700; border-radius:8px; padding:6px 12px; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
+                <span>＋</span> 새 드론 등록
+              </button>
+            </div>
+
+            <!-- 드론 카드 목록 컨테이너 -->
+            <div id="droneListContainer" style="display:flex; flex-direction:column; gap:12px; min-height:220px;">
+              <!-- JS로 렌더링됨 -->
+              <div style="text-align:center; padding:50px 20px; color:#94a3b8;">
+                <div style="font-size:36px; margin-bottom:8px;">🛸</div>
+                <div style="font-size:14px; font-weight:700; color:#64748b;">드론 목록을 불러오는 중입니다...</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 우측: 드론 정보 등록 & 수정 폼 카드 -->
+          <div style="background:#ffffff; border:1px solid var(--line); border-radius:18px; padding:22px; box-shadow:var(--shadow);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid var(--line); padding-bottom:12px;">
+              <div>
+                <h3 id="droneFormTitle" style="margin:0; font-size:16px; font-weight:800; color:var(--navy); display:flex; align-items:center; gap:8px;">
+                  <span>📝</span> 드론 정보 등록
+                </h3>
+                <small style="color:var(--muted); font-size:11.5px;">드론원스톱 비행 승인 신청 서식에 준하는 기체 상세 정보를 입력하세요.</small>
+              </div>
+              <span id="droneFormModeBadge" style="background:#f1f5f9; color:#475569; font-size:11px; font-weight:700; padding:4px 8px; border-radius:6px;">신규 등록 모드</span>
+            </div>
+
+            <form id="droneForm" onsubmit="handleDroneFormSubmit(event)" style="display:flex; flex-direction:column; gap:14px;">
+              <input type="hidden" id="formDroneId" value="">
+
+              <!-- 1. 기본 식별 정보 -->
+              <div style="background:#f8fafc; padding:12px; border-radius:10px; border:1px solid #edf2f7;">
+                <div style="font-size:12px; font-weight:800; color:#334155; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+                  <span>① 기본 식별 정보</span>
+                </div>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                  <div>
+                    <label style="display:block; font-size:11.5px; font-weight:700; color:#475569; margin-bottom:4px;">기체 종류</label>
+                    <select id="droneFieldType" style="width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px; font-size:12px; background:#fff;">
+                      <option value="무인멀티콥터" selected>무인멀티콥터 (드론)</option>
+                      <option value="무인비행기">무인비행기 (고정익)</option>
+                      <option value="무인헬리콥터">무인헬리콥터</option>
+                      <option value="기타">기타 초경량비행장치</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style="display:block; font-size:11.5px; font-weight:700; color:#475569; margin-bottom:4px;">신고번호</label>
+                    <input type="text" id="droneFieldReportNumber" placeholder="예: S2026-0042 (미신고 시 비움)" style="width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px; font-size:12px; box-sizing:border-box;">
+                  </div>
+                </div>
+
+                <div style="display:grid; grid-template-columns: 1.3fr 1fr; gap:10px; margin-top:10px;">
+                  <div>
+                    <label style="display:block; font-size:11.5px; font-weight:700; color:#1e40af; margin-bottom:4px;">
+                      모델명 <span style="color:#ef4444; font-weight:900;">* (필수)</span>
+                    </label>
+                    <input type="text" id="droneFieldModelName" required placeholder="예: DJI Mini 4 Pro, Mavic 3 Pro" style="width:100%; padding:8px 10px; border:1.5px solid #93c5fd; border-radius:7px; font-size:12px; box-sizing:border-box; background:#f0f7ff;">
+                  </div>
+                  <div>
+                    <label style="display:block; font-size:11.5px; font-weight:700; color:#475569; margin-bottom:4px;">제작자 / 제조사</label>
+                    <input type="text" id="droneFieldManufacturer" placeholder="예: DJI, Autel, 유콘시스템" style="width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px; font-size:12px; box-sizing:border-box;">
+                  </div>
+                </div>
+
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:10px;">
+                  <div>
+                    <label style="display:block; font-size:11.5px; font-weight:700; color:#475569; margin-bottom:4px;">비행 용도</label>
+                    <select id="droneFieldPurpose" style="width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px; font-size:12px; background:#fff;">
+                      <option value="비영리" selected>비영리 (개인/취미/학술/동호회)</option>
+                      <option value="영리">영리 (상업촬영/측량/방제 등)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style="display:block; font-size:11.5px; font-weight:700; color:#475569; margin-bottom:4px;">운용 유형</label>
+                    <select id="droneFieldOperationType" style="width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px; font-size:12px; background:#fff;">
+                      <option value="비연구용" selected>비연구용 (일반 운용)</option>
+                      <option value="연구용">연구용 (시험비행/R&D)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 2. 기체 규격 및 기기 번호 -->
+              <div style="background:#f8fafc; padding:12px; border-radius:10px; border:1px solid #edf2f7;">
+                <div style="font-size:12px; font-weight:800; color:#334155; margin-bottom:8px;">② 규격 및 중량</div>
+                <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px;">
+                  <div>
+                    <label style="display:block; font-size:11.5px; font-weight:700; color:#475569; margin-bottom:4px;">자체중량</label>
+                    <input type="text" id="droneFieldWeight" placeholder="예: 249g (초경량)" value="249g" style="width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px; font-size:12px; box-sizing:border-box;">
+                  </div>
+                  <div>
+                    <label style="display:block; font-size:11.5px; font-weight:700; color:#475569; margin-bottom:4px;">기체 규격</label>
+                    <input type="text" id="droneFieldSpecs" placeholder="예: 298×373×101mm" style="width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px; font-size:12px; box-sizing:border-box;">
+                  </div>
+                  <div>
+                    <label style="display:block; font-size:11.5px; font-weight:700; color:#475569; margin-bottom:4px;">제작번호 (S/N)</label>
+                    <input type="text" id="droneFieldSerial" placeholder="기체 고유 일련번호" style="width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px; font-size:12px; box-sizing:border-box;">
+                  </div>
+                </div>
+              </div>
+
+              <!-- 3. 소유자 및 인증/보험 정보 -->
+              <div style="background:#f8fafc; padding:12px; border-radius:10px; border:1px solid #edf2f7;">
+                <div style="font-size:12px; font-weight:800; color:#334155; margin-bottom:8px;">③ 소유자 및 안전·보험 정보</div>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                  <div>
+                    <label style="display:block; font-size:11.5px; font-weight:700; color:#475569; margin-bottom:4px;">소유자 성명</label>
+                    <input type="text" id="droneFieldOwner" placeholder="홍길동" style="width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px; font-size:12px; box-sizing:border-box;">
+                  </div>
+                  <div>
+                    <label style="display:block; font-size:11.5px; font-weight:700; color:#475569; margin-bottom:4px;">연락처 (전화번호)</label>
+                    <input type="text" id="droneFieldPhone" placeholder="010-1234-5678" style="width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px; font-size:12px; box-sizing:border-box;">
+                  </div>
+                </div>
+
+                <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; margin-top:10px;">
+                  <div>
+                    <label style="display:block; font-size:11.5px; font-weight:700; color:#475569; margin-bottom:4px;">안전성인증증번호</label>
+                    <input type="text" id="droneFieldSafetyCert" placeholder="인증번호 (25kg 초과 시)" style="width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px; font-size:12px; box-sizing:border-box;">
+                  </div>
+                  <div>
+                    <label style="display:block; font-size:11.5px; font-weight:700; color:#475569; margin-bottom:4px;">인증 유효기간</label>
+                    <input type="date" id="droneFieldCertExpiry" style="width:100%; padding:7px 10px; border:1px solid #cbd5e1; border-radius:7px; font-size:12px; box-sizing:border-box; background:#fff;">
+                  </div>
+                  <div>
+                    <label style="display:block; font-size:11.5px; font-weight:700; color:#475569; margin-bottom:4px;">보험 가입 유무</label>
+                    <select id="droneFieldInsurance" style="width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px; font-size:12px; background:#fff;">
+                      <option value="가입" selected>가입 (배상책임/기체)</option>
+                      <option value="미가입">미가입</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 4. 기체 상세 설명 -->
+              <div>
+                <label style="display:block; font-size:11.5px; font-weight:700; color:#475569; margin-bottom:4px;">상세 설명 및 특이사항</label>
+                <textarea id="droneFieldDesc" rows="2" placeholder="기체 특성, 카메라 탑재 사양, 특수 센서 유무 등을 자유롭게 기록하세요." style="width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:7px; font-size:12px; box-sizing:border-box; resize:vertical;"></textarea>
+              </div>
+
+              <div id="droneFormError" style="display:none; color:#dc2626; font-size:12px; background:#fef2f2; border:1px solid #fecaca; border-radius:6px; padding:8px 12px;"></div>
+
+              <!-- 저장 및 초기화 버튼 -->
+              <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
+                <button type="button" onclick="resetDroneForm()" style="background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; border-radius:8px; padding:9px 16px; font-size:12px; font-weight:700; cursor:pointer;">
+                  초기화
+                </button>
+                <button type="submit" id="btnSaveDrone" style="background:#2563eb; color:#ffffff; border:none; border-radius:8px; padding:9px 22px; font-size:13px; font-weight:700; cursor:pointer; box-shadow:0 2px 6px rgba(37,99,235,0.3);">
+                  💾 드론 정보 저장
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
     </div>
   </main>
 </div>
@@ -2183,45 +2385,329 @@ function toast(msg) {
 }
 
 /* -------------------------------------------------------------
- * 2. Navigation Switcher (1번 비행 적합성, 2번 대화로 신청하기, 3번 촬영 도우미)
+ * 2. Navigation Switcher (1번 비행 적합성, 2번 대화로 신청하기, 3번 촬영 도우미, 4번 설정 및 드론 관리)
  * ------------------------------------------------------------- */
 function switchView(viewName) {
-  $('viewSafety').classList.remove('active-view');
-  $('viewChat').classList.remove('active-view');
-  $('viewCinema').classList.remove('active-view');
-  $('navSafety').classList.remove('active');
-  $('navChat').classList.remove('active');
-  $('navCinema').classList.remove('active');
+  $('viewSafety')?.classList.remove('active-view');
+  $('viewChat')?.classList.remove('active-view');
+  $('viewCinema')?.classList.remove('active-view');
+  $('viewSettings')?.classList.remove('active-view');
+  $('navSafety')?.classList.remove('active');
+  $('navChat')?.classList.remove('active');
+  $('navCinema')?.classList.remove('active');
+  $('navSettings')?.classList.remove('active');
 
   if (viewName === 'safety') {
-    $('viewSafety').classList.add('active-view');
-    $('navSafety').classList.add('active');
+    $('viewSafety')?.classList.add('active-view');
+    $('navSafety')?.classList.add('active');
     $('topCrumb').textContent = '1. 비행 적합성 분석';
     setTimeout(() => { if (mapInstance) mapInstance.invalidateSize(); }, 200);
   } else if (viewName === 'chat') {
-    $('viewChat').classList.add('active-view');
-    $('navChat').classList.add('active');
+    $('viewChat')?.classList.add('active-view');
+    $('navChat')?.classList.add('active');
     $('topCrumb').textContent = '2. 대화로 신청하기';
   } else if (viewName === 'cinema') {
-    $('viewCinema').classList.add('active-view');
-    $('navCinema').classList.add('active');
+    $('viewCinema')?.classList.add('active-view');
+    $('navCinema')?.classList.add('active');
     $('topCrumb').textContent = '3. 촬영 도우미';
+  } else if (viewName === 'settings') {
+    $('viewSettings')?.classList.add('active-view');
+    $('navSettings')?.classList.add('active');
+    $('topCrumb').textContent = '4. 설정 및 드론 관리';
+    loadUserDrones();
   }
 }
 
 // 1번 메뉴: 비행 적합성 분석 클릭
-$('navSafety').addEventListener('click', () => switchView('safety'));
+$('navSafety')?.addEventListener('click', () => switchView('safety'));
 
 // 2번 메뉴: 대화로 신청하기 클릭
-$('navChat').addEventListener('click', () => switchView('chat'));
+$('navChat')?.addEventListener('click', () => switchView('chat'));
 if ($('goChatBtn')) $('goChatBtn').addEventListener('click', () => switchView('chat'));
 
-// 3번 메뉴: 촬영 도우미 클릭 (신규)
-$('navCinema').addEventListener('click', () => switchView('cinema'));
+// 3번 메뉴: 촬영 도우미 클릭
+$('navCinema')?.addEventListener('click', () => switchView('cinema'));
+
+// 4번 메뉴: 설정 및 드론 관리 클릭 (신규)
+$('navSettings')?.addEventListener('click', () => switchView('settings'));
 
 // 신청서 미리보기 클릭 시 브라우저 새 탭으로 열기!
-$('navDoc').addEventListener('click', () => openDocInNewTab());
-$('makeDocBtn').addEventListener('click', () => openDocInNewTab());
+$('navDoc')?.addEventListener('click', () => openDocInNewTab());
+$('makeDocBtn')?.addEventListener('click', () => openDocInNewTab());
+
+/* -------------------------------------------------------------
+ * 2.1. Drone Fleet Management & Settings (View 4)
+ * ------------------------------------------------------------- */
+let userDronesCache = [];
+
+function getAuthHeaders() {
+  const token = localStorage.getItem('sky_auth_token');
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
+async function loadUserDrones() {
+  const container = $('droneListContainer');
+  const countBadge = $('droneCountBadge');
+  const statusNotice = $('droneAuthStatusText');
+  const btnGoLogin = $('btnDroneGoLogin');
+
+  const token = localStorage.getItem('sky_auth_token');
+  const savedUserJson = localStorage.getItem('sky_auth_user');
+
+  if (!token || !savedUserJson) {
+    if (statusNotice) statusNotice.innerHTML = '<span style="color:#dc2626;">⚠️ 로그인이 필요합니다.</span> 보유 드론을 안전하게 보관하고 관리하려면 먼저 로그인해 주세요.';
+    if (btnGoLogin) btnGoLogin.style.display = 'inline-flex';
+    if (container) {
+      container.innerHTML = `
+        <div style="text-align:center; padding:40px 16px; background:#f8fafc; border:1px dashed #cbd5e1; border-radius:12px;">
+          <div style="font-size:32px; margin-bottom:8px;">🔒</div>
+          <strong style="display:block; color:#1e293b; font-size:14px; margin-bottom:4px;">로그인 후 드론을 관리할 수 있습니다</strong>
+          <p style="margin:0 0 14px 0; color:#64748b; font-size:12px;">현재 로그인 상태가 아니므로 기체 목록을 조회할 수 없습니다.</p>
+          <button type="button" onclick="openAuthModal('login')" style="background:#2563eb; color:#fff; border:none; padding:7px 16px; font-weight:700; border-radius:8px; font-size:12px; cursor:pointer;">
+            👤 로그인하기
+          </button>
+        </div>
+      `;
+    }
+    if (countBadge) countBadge.textContent = '0대';
+    return;
+  }
+
+  let user = null;
+  try { user = JSON.parse(savedUserJson); } catch(e){}
+  if (statusNotice) {
+    statusNotice.innerHTML = `👤 연동 계정: <b>${user?.username || user?.email || '조종사'}</b> (회원 전용 안전 DB 보관소 연동 중)`;
+  }
+  if (btnGoLogin) btnGoLogin.style.display = 'none';
+
+  const baseUrl = window.location.origin.includes(':5500') ? 'http://localhost:8000' : '';
+
+  try {
+    const res = await fetch(`${baseUrl}/api/drones`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) {
+      if (res.status === 401) {
+        throw new Error('로그인 인증이 만료되었습니다. 다시 로그인해 주세요.');
+      }
+      throw new Error(`드론 목록을 불러오지 못했습니다. (코드: ${res.status})`);
+    }
+    const drones = await res.json();
+    userDronesCache = drones;
+    renderDroneCards(drones);
+    if (countBadge) countBadge.textContent = `${drones.length}대`;
+  } catch(e) {
+    if (container) {
+      container.innerHTML = `
+        <div style="text-align:center; padding:30px 16px; color:#ef4444; background:#fef2f2; border:1px solid #fecaca; border-radius:12px; font-size:12px;">
+          <div style="font-size:24px; margin-bottom:4px;">⚠️</div>
+          <b>${e.message}</b>
+        </div>
+      `;
+    }
+  }
+}
+
+function renderDroneCards(drones) {
+  const container = $('droneListContainer');
+  if (!container) return;
+
+  if (!drones || drones.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center; padding:50px 20px; background:#f8fafc; border:1px dashed #cbd5e1; border-radius:12px;">
+        <div style="font-size:36px; margin-bottom:8px;">🛸</div>
+        <strong style="display:block; color:#1e293b; font-size:14px; margin-bottom:4px;">등록된 드론이 없습니다.</strong>
+        <p style="margin:0; color:#64748b; font-size:12px;">우측의 등록 양식을 통해 보유 중인 드론 기체를 등록해 보세요.</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = drones.map(d => `
+    <div class="drone-item-card" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; padding:14px; display:flex; flex-direction:column; gap:8px; box-shadow:0 1px 3px rgba(0,0,0,0.04); transition:all 0.15s ease;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <div style="width:34px; height:34px; border-radius:10px; background:#eff6ff; color:#2563eb; display:grid; place-items:center; font-size:18px;">🛸</div>
+          <div>
+            <h4 style="margin:0; font-size:14px; font-weight:800; color:#0f172a;">${escapeHtml(d.model_name)}</h4>
+            <div style="font-size:11px; color:#64748b; margin-top:2px;">제조사: ${escapeHtml(d.manufacturer || '미입력')} · 자체중량: ${escapeHtml(d.takeoff_weight || '249g')}</div>
+          </div>
+        </div>
+        <div style="display:flex; gap:4px; flex-wrap:wrap; justify-content:flex-end;">
+          <span style="font-size:10px; font-weight:700; background:#e0f2fe; color:#0369a1; padding:2px 7px; border-radius:6px;">${escapeHtml(d.drone_type || '무인멀티콥터')}</span>
+          <span style="font-size:10px; font-weight:700; background:${d.purpose === '영리' ? '#fef3c7' : '#ecfdf5'}; color:${d.purpose === '영리' ? '#b45309' : '#047857'}; padding:2px 7px; border-radius:6px;">${escapeHtml(d.purpose || '비영리')}</span>
+        </div>
+      </div>
+
+      <div style="background:#f8fafc; border-radius:8px; padding:8px 10px; font-size:11.5px; color:#475569; display:grid; grid-template-columns: 1fr 1fr; gap:4px;">
+        <div><b>신고번호:</b> ${escapeHtml(d.report_number || '미신고/비움')}</div>
+        <div><b>보험여부:</b> <span style="color:${d.insurance_status === '가입' ? '#16a34a' : '#dc2626'}; font-weight:700;">${escapeHtml(d.insurance_status || '미가입')}</span></div>
+        ${d.specifications ? `<div><b>규격:</b> ${escapeHtml(d.specifications)}</div>` : ''}
+        ${d.owner_name ? `<div><b>소유자:</b> ${escapeHtml(d.owner_name)}</div>` : ''}
+      </div>
+
+      ${d.description ? `<div style="font-size:11px; color:#64748b; line-height:1.4;">${escapeHtml(d.description)}</div>` : ''}
+
+      <div style="display:flex; justify-content:flex-end; gap:6px; margin-top:4px; padding-top:6px; border-top:1px solid #f1f5f9;">
+        <button type="button" onclick="editDrone(${d.drone_id})" style="background:#f1f5f9; color:#1e40af; border:1px solid #cbd5e1; border-radius:6px; padding:4px 10px; font-size:11px; font-weight:700; cursor:pointer;">
+          ✏ 수정
+        </button>
+        <button type="button" onclick="deleteDrone(${d.drone_id}, '${escapeHtml(d.model_name)}')" style="background:#fef2f2; color:#dc2626; border:1px solid #fecaca; border-radius:6px; padding:4px 10px; font-size:11px; font-weight:700; cursor:pointer;">
+          🗑 삭제
+        </button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/[&<>"']/g, m => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[m]));
+}
+
+function editDrone(droneId) {
+  const drone = userDronesCache.find(d => d.drone_id === droneId);
+  if (!drone) return;
+
+  $('formDroneId').value = drone.drone_id;
+  $('droneFieldType').value = drone.drone_type || '무인멀티콥터';
+  $('droneFieldReportNumber').value = drone.report_number || '';
+  $('droneFieldModelName').value = drone.model_name || '';
+  $('droneFieldPurpose').value = drone.purpose || '비영리';
+  $('droneFieldManufacturer').value = drone.manufacturer || '';
+  $('droneFieldOperationType').value = drone.operation_type || '비연구용';
+  $('droneFieldWeight').value = drone.takeoff_weight || '249g';
+  $('droneFieldSpecs').value = drone.specifications || '';
+  $('droneFieldSerial').value = drone.serial_number || '';
+  $('droneFieldOwner').value = drone.owner_name || '';
+  $('droneFieldPhone').value = drone.phone_number || '';
+  $('droneFieldSafetyCert').value = drone.safety_cert_number || '';
+  $('droneFieldCertExpiry').value = drone.cert_expiry_date || '';
+  $('droneFieldInsurance').value = drone.insurance_status || '가입';
+  $('droneFieldDesc').value = drone.description || '';
+
+  $('droneFormTitle').innerHTML = `<span>✏️</span> 드론 정보 수정 (ID: #${drone.drone_id})`;
+  $('droneFormModeBadge').textContent = '기체 정보 수정 모드';
+  $('droneFormModeBadge').style.background = '#fef3c7';
+  $('droneFormModeBadge').style.color = '#b45309';
+  $('btnSaveDrone').innerHTML = '💾 수정 사항 저장';
+
+  toast(`'${drone.model_name}' 기체 정보를 수정 양식에 불러왔습니다.`);
+  $('droneFieldModelName')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function resetDroneForm() {
+  $('droneForm').reset();
+  $('formDroneId').value = '';
+  $('droneFormTitle').innerHTML = '<span>📝</span> 드론 정보 등록';
+  $('droneFormModeBadge').textContent = '신규 등록 모드';
+  $('droneFormModeBadge').style.background = '#f1f5f9';
+  $('droneFormModeBadge').style.color = '#475569';
+  $('btnSaveDrone').innerHTML = '💾 드론 정보 저장';
+  const err = $('droneFormError');
+  if (err) err.style.display = 'none';
+}
+
+async function handleDroneFormSubmit(e) {
+  e.preventDefault();
+  const formDroneId = $('formDroneId').value;
+  const isEdit = Boolean(formDroneId);
+
+  const modelName = $('droneFieldModelName')?.value?.trim();
+  const errBox = $('droneFormError');
+
+  if (!modelName) {
+    if (errBox) {
+      errBox.textContent = '드론 모델명은 필수 입력 항목입니다.';
+      errBox.style.display = 'block';
+    }
+    $('droneFieldModelName')?.focus();
+    return;
+  }
+  if (errBox) errBox.style.display = 'none';
+
+  const payload = {
+    model_name: modelName,
+    drone_type: $('droneFieldType')?.value || '무인멀티콥터',
+    report_number: $('droneFieldReportNumber')?.value?.trim() || null,
+    purpose: $('droneFieldPurpose')?.value || '비영리',
+    manufacturer: $('droneFieldManufacturer')?.value?.trim() || null,
+    operation_type: $('droneFieldOperationType')?.value || '비연구용',
+    specifications: $('droneFieldSpecs')?.value?.trim() || null,
+    takeoff_weight: $('droneFieldWeight')?.value?.trim() || '249g',
+    serial_number: $('droneFieldSerial')?.value?.trim() || null,
+    owner_name: $('droneFieldOwner')?.value?.trim() || null,
+    phone_number: $('droneFieldPhone')?.value?.trim() || null,
+    safety_cert_number: $('droneFieldSafetyCert')?.value?.trim() || null,
+    cert_expiry_date: $('droneFieldCertExpiry')?.value || null,
+    insurance_status: $('droneFieldInsurance')?.value || '가입',
+    description: $('droneFieldDesc')?.value?.trim() || null
+  };
+
+  const btn = $('btnSaveDrone');
+  btn.disabled = true;
+  btn.textContent = '저장 처리 중...';
+
+  const baseUrl = window.location.origin.includes(':5500') ? 'http://localhost:8000' : '';
+  const url = isEdit ? `${baseUrl}/api/drones/${formDroneId}` : `${baseUrl}/api/drones`;
+  const method = isEdit ? 'PUT' : 'POST';
+
+  try {
+    const res = await fetch(url, {
+      method: method,
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || '드론 정보 저장에 실패했습니다.');
+    }
+
+    toast(isEdit ? `🎉 '${data.model_name}' 기체 정보가 수정되었습니다.` : `🎉 '${data.model_name}' 기체가 등록되었습니다.`);
+    resetDroneForm();
+    await loadUserDrones();
+  } catch(err) {
+    if (errBox) {
+      errBox.textContent = err.message;
+      errBox.style.display = 'block';
+    }
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = isEdit ? '💾 수정 사항 저장' : '💾 드론 정보 저장';
+  }
+}
+
+async function deleteDrone(droneId, modelName) {
+  if (!confirm(`정말로 등록된 '${modelName}' 기체를 삭제하시겠습니까?\n삭제 후에는 복구할 수 없습니다.`)) {
+    return;
+  }
+
+  const baseUrl = window.location.origin.includes(':5500') ? 'http://localhost:8000' : '';
+  try {
+    const res = await fetch(`${baseUrl}/api/drones/${droneId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || '삭제 중 오류가 발생했습니다.');
+    }
+    toast(`🗑 '${modelName}' 기체가 삭제되었습니다.`);
+    if ($('formDroneId').value == droneId) {
+      resetDroneForm();
+    }
+    await loadUserDrones();
+  } catch(e) {
+    alert(e.message || '삭제에 실패했습니다.');
+  }
+}
 
 /* -------------------------------------------------------------
  * 2.5. Cinematography Assistant Engine (View 3)
@@ -6168,6 +6654,7 @@ function updateAuthUI() {
       if (sidebarLoggedIn) sidebarLoggedIn.style.display = 'flex';
       if (sidebarUserEmail) sidebarUserEmail.textContent = displayName;
       if (sidebarUserAvatar) sidebarUserAvatar.textContent = (displayName[0] || 'U').toUpperCase();
+      if (typeof loadUserDrones === 'function') loadUserDrones();
       return;
     } catch(e) {}
   }
@@ -6176,6 +6663,7 @@ function updateAuthUI() {
   if (loggedInBar) loggedInBar.style.display = 'none';
   if (sidebarLoggedOut) sidebarLoggedOut.style.display = 'flex';
   if (sidebarLoggedIn) sidebarLoggedIn.style.display = 'none';
+  if (typeof loadUserDrones === 'function') loadUserDrones();
 }
 
 function handleLogout() {

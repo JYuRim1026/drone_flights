@@ -383,7 +383,7 @@ def get_current_user(
             detail="토큰 페이로드에 사용자 식별 정보(sub)가 없습니다."
         )
         
-    user = db.query(User).filter(User.username == username).first()
+    user = db.query(User).filter((User.username == username) | (User.email == username)).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -412,7 +412,7 @@ def get_optional_current_user(
         username = payload.get("sub")
         if not username:
             return None
-        return db.query(User).filter(User.username == username).first()
+        return db.query(User).filter((User.username == username) | (User.email == username)).first()
     except Exception:
         return None
 

@@ -14,7 +14,8 @@ from backend.routers import (
     safety_router,
     sync_router,
     auth_router,
-    gateway_router
+    gateway_router,
+    drones_router
 )
 from backend.services.auth_service import auth_service
 
@@ -188,6 +189,7 @@ app.include_router(ai_router, prefix=settings.API_V1_STR)
 app.include_router(safety_router, prefix=settings.API_V1_STR)
 app.include_router(sync_router, prefix=settings.API_V1_STR)
 app.include_router(auth_router, prefix=settings.API_V1_STR)
+app.include_router(drones_router, prefix=settings.API_V1_STR)
 app.include_router(gateway_router)  # 단일 대표 URL: /app, /launch, /app/select
 
 @app.get("/", tags=["System Health"])
