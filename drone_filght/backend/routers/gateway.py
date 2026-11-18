@@ -65,7 +65,7 @@ def smart_app_gateway(
     사용자가 단 하나의 URL(`http://서버주소/app`)로 접속하면,
     서버가 접속 기기(User-Agent)를 초고속으로 판별하여:
     - 📱 스마트폰/태블릿 ➔ 모바일 웹(Netlify camera.html / index.html)으로 자동 이동
-    - 💻 PC/노트북 ➔ PC 관제 대시보드(Streamlit / :8501)로 자동 이동
+    - 💻 PC/노트북 ➔ PC 관제 대시보드(pc.html)로 자동 이동
     """
     user_agent = request.headers.get("user-agent", "")
     is_mobile = detect_is_mobile(user_agent)

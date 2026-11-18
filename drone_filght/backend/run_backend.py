@@ -19,7 +19,7 @@ import uvicorn
 if __name__ == "__main__":
     print("=" * 60)
     print("🛰️ 드론 비행 안전 & 촬영 지원 통합 백엔드 서버를 시작합니다.")
-    print("👉 PC 웹 클라이언트 : http://localhost:8501")
+    print("👉 PC 웹 클라이언트 : http://localhost:5500/pc.html")
     print("👉 모바일 웹 배포 : https://chimerical-trifle-7e9011.netlify.app")
     print("👉 Swagger API 문서 : http://localhost:8000/docs")
     print("👉 대화형 Redoc 문서 : http://localhost:8000/redoc")

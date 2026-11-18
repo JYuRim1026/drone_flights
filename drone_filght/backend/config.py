@@ -57,12 +57,10 @@ class Settings:
     
     # CORS Origins (PC Web localhost, Mobile Web Netlify, etc.)
     CORS_ORIGINS: List[str] = [
-        "http://localhost:8501",       # Streamlit PC Web
         "http://localhost:3000",       # Local Web Client
-        "http://localhost:5500",       # VS Code Live Server
+        "http://localhost:5500",       # Local Web Server
         "http://localhost:8000",       # Backend Swagger
         "http://127.0.0.1:5500",
-        "http://127.0.0.1:8501",
         "http://127.0.0.1:8000",
         "https://chimerical-trifle-7e9011.netlify.app", # Netlify Mobile Web
         "*"

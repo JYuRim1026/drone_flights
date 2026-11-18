@@ -1,4 +1,4 @@
-// Sky Command Content Script - Listens for events from Streamlit Web App (http://localhost:8501)
+// Sky Command Content Script - Listens for events from Web Dashboard (http://localhost:5500)
 
 window.addEventListener('message', (event) => {
   // Check if message is from Sky Command
