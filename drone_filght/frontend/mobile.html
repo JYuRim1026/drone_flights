@@ -28,7 +28,7 @@
     <a href="pc.html" style="background:rgba(255,255,255,0.18); color:white; padding:4px 10px; border-radius:99px; text-decoration:none; font-weight:700; font-size:11px;">💻 PC 관제</a>
   </div>
 </div>
-<div class="app"><aside class="side"><div class="brand"><div class="mark">✦</div>날려드려 <span style="font-weight:500;color:#9bb4df">촬영 도우미</span></div><div class="nav-title">촬영 관리</div><nav class="nav"><button class="active" data-page="application"><span>▣</span>내 촬영 신청</button><button data-page="condition"><span>☼</span>시간·비행 조건</button><button data-page="route"><span>⌖</span>경로·구도 추천</button><button data-page="camera"><span>◉</span>카메라 연동</button><button data-page="guide"><span>▤</span>실시간 구도 가이드</button><button data-page="community"><span>♧</span>사용자 커뮤니티</button></nav><div class="side-note">신청은 웹에서 진행하고,<br>앱에서는 신청 내용을 확인하고<br>촬영을 준비할 수 있습니다.<br><br>※ 실제 비행 전 최신 기상·공역·기체 상태를 확인하세요.</div></aside>
+<div class="app"><aside class="side"><div class="brand"><div class="mark">✦</div>날려드려 <span style="font-weight:500;color:#9bb4df">촬영 도우미</span></div><div class="nav-title">촬영 관리</div><nav class="nav"><button class="active" data-page="application"><span>▣</span>내 촬영 신청</button><button data-page="condition"><span>☼</span>시간·비행 조건</button><button data-page="camera"><span>◉</span>카메라 연동</button><button data-page="community"><span>♧</span>사용자 커뮤니티</button></nav><div class="side-note">신청은 웹에서 진행하고,<br>앱에서는 신청 내용을 확인하고<br>촬영을 준비할 수 있습니다.<br><br>※ 실제 비행 전 최신 기상·공역·기체 상태를 확인하세요.</div></aside>
 <main class="main"><header class="top"><div><div class="eyebrow">MY SHOOTING APPLICATION</div><h1>AI 시네마틱 드론 촬영 도우미</h1><p>웹에서 신청한 촬영 계획을 확인하고 촬영 과정을 준비하세요.</p></div><div class="top-right"><a href="pc.html" class="switch-btn">💻 PC 관제 대시보드</a><div class="status">● 모바일 웹 구동 중</div></div></header>
 <section id="application" class="page">
   <div class="grid">
@@ -258,9 +258,74 @@
   </div>
 </section>
 <section id="condition" class="page hidden"><div class="grid"><div class="card"><h2>시간대 및 비행 조건 분석</h2><p class="sub" id="condSubDesc">선택된 현장 좌표의 기상청 실시간 관측·예보 정보를 표시합니다.</p><div class="timeline" id="condTimeline"><div class="time"><b>--:--</b>조회 중<br>풍속 --m/s</div><div class="time"><b>--:--</b>조회 중<br>풍속 --m/s</div><div class="time"><b>--:--</b>조회 중<br>풍속 --m/s</div><div class="time"><b>--:--</b>조회 중<br>풍속 --m/s</div><div class="time"><b>--:--</b>조회 중<br>풍속 --m/s</div></div><div class="metric"><span>촬영 계획 시간</span><b class="green" id="condTimePlan">오후 15:30 ~ 17:30 (골든아워)</b></div><div class="metric"><span>현재 기온 · 풍속</span><span id="condWind">기상청 실황 조회 중...</span></div><div class="metric"><span>강수량 · 강수확률</span><span class="green" id="condRainProb">조회 중...</span></div><div class="metric"><span>관측 시각 · KMA 격자</span><span id="condObsGrid">실시간 연동 중...</span></div></div><div class="card"><h2>운용 조건 체크</h2><p class="sub">기상청 실시간 풍속·돌풍·강수량 기준 확인 항목입니다.</p><div class="recommend" id="condRecommend" style="border-color:var(--blue);background:#f8fbff"><b>기상청 실황 조회 중...</b><br>선택한 촬영지의 실시간 기상청 데이터를 불러오고 있습니다.</div><div class="chips" id="condChips"><span class="chip">✓ 시야 확보</span><span class="chip">✓ 배터리 여유</span><span class="chip">! 사람 밀집도 확인</span><span class="chip">! 공역 승인 확인</span></div></div></div></section>
-<section id="route" class="page hidden"><div class="grid"><div class="card"><h2>촬영 포인트 및 비행 경로</h2><p class="sub">신청한 촬영 목적에 맞춘 추천 경로입니다.</p><div class="map"><div class="route"></div><div class="point p1"></div><div class="point p2"></div><div class="point p3"></div></div><div class="legend"><i style="background:#ff6b5e"></i>촬영 포인트　 <i style="background:#326eff"></i>추천 비행 경로</div></div><div class="card"><h2>포인트별 촬영 지시</h2><p class="sub">초보자도 따라 할 수 있도록 순서대로 안내합니다.</p><div class="metric"><span><b>01</b> 시작 지점</span><span>고도 30m · 북동쪽</span></div><div class="metric"><span><b>02</b> 메인 포인트</span><span>고도 45m · 대상 정면</span></div><div class="metric"><span><b>03</b> 마무리 포인트</span><span>고도 35m · 남서쪽</span></div><div class="recommend" style="margin-top:16px"><b>추천 무빙</b><br>시작 지점에서 천천히 전진하면서 우측으로 20° 팬하고, 메인 포인트에서 3초간 정지 촬영하세요.</div></div></div></section>
-<section id="camera" class="page hidden"><div class="grid"><div class="card"><h2>카메라 연동</h2><p class="sub">휴대폰 카메라를 사용하거나 촬영한 영상을 불러와 구도를 확인할 수 있습니다.</p><div class="camera-box"><div class="connection" id="connection"><i class="dot"></i><span>카메라 연결 안 됨</span></div><div class="camera-preview"><video id="video" autoplay playsinline muted class="hidden"></video><span id="previewText">카메라 미리보기 영역</span></div><div class="camera-actions"><button class="primary" id="openCameraPage" type="button">휴대폰 카메라 연결</button><label class="secondary">촬영 영상 불러오기<input id="videoFile" type="file" accept="video/*" hidden></label></div></div></div><div class="card"><h2>연동 후 사용할 기능</h2><p class="sub">카메라 화면은 실시간 구도 가이드와 연결됩니다.</p><div class="metric"><span>목표 구도 프레임</span><b>카메라 화면 위에 표시</b></div><div class="metric"><span>현재 구도 비교</span><b>피사체 위치·수평선 분석</b></div><div class="metric"><span>상태 안내</span><b class="green">구도 양호 / 조정 필요</b></div><div class="recommend" style="margin-top:16px"><b>권한 안내</b><br>브라우저에서 카메라 권한을 허용해야 합니다. 실제 드론 카메라 연동은 기체 제조사 SDK 또는 별도 전송 모듈 연결이 필요합니다.</div></div></div></section>
-<section id="guide" class="page hidden"><div class="grid"><div class="card"><h2>실시간 촬영 구도 가이드</h2><p class="sub">카메라 화면과 목표 구도를 비교하는 프로토타입입니다.</p><div class="guide"><h3>목표 구도 · 한강 와이드 establishing shot</h3><div class="frame">목표 피사체 영역<br>수평선 유지</div><p>현재 구도 양호 · 드론을 0.5m 전진하세요</p></div></div><div class="card"><h2>조종기 스틱 콤보</h2><p class="sub">추천 경로를 재현하기 위한 간단한 조작 안내입니다.</p><div class="metric"><span>1단계 · 전진</span><b>왼쪽 스틱 ↑ 30%</b></div><div class="metric"><span>2단계 · 우측 팬</span><b>오른쪽 스틱 → 20%</b></div><div class="metric"><span>3단계 · 고도 유지</span><b>왼쪽 스틱 중앙</b></div><div class="recommend" style="margin-top:16px"><b>초보자 팁</b><br>한 번에 여러 방향을 조작하지 말고 각 동작을 3~5초씩 나누어 확인하세요.</div></div></div></section>
+<section id="camera" class="page hidden">
+  <div class="grid">
+    <!-- Top Project Briefing Card -->
+    <div class="card" style="grid-column: 1 / -1; background:#ffffff; border:1px solid #dbeafe; box-shadow:0 4px 14px rgba(37,99,235,0.06);">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+        <div>
+          <span style="font-size:11px; font-weight:800; color:#2563eb; background:#eff6ff; padding:2px 8px; border-radius:6px;">선택된 촬영 프로젝트</span>
+          <h2 id="camProjTitle" style="margin:4px 0 2px 0; font-size:17px; color:#0f172a;">한강 수변 시네마틱 풍경 촬영</h2>
+          <p id="camProjPlace" style="margin:0; font-size:12px; color:#64748b;">서울 한강공원 (여의도 수변) · 경관·여행</p>
+        </div>
+        <span id="camProjBadge" style="font-size:11px; font-weight:700; background:#fef3c7; color:#92400e; padding:4px 10px; border-radius:12px;">🟡 사전 승인 필요</span>
+      </div>
+
+      <!-- Quick Briefing Grid -->
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:8px; margin-bottom:12px;">
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:8px 10px;">
+          <div style="font-size:11px; color:#64748b; margin-bottom:2px;">일시 및 시간대</div>
+          <div id="camProjTime" style="font-size:12px; font-weight:700; color:#1e293b;">10.24 15:30~17:30</div>
+        </div>
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:8px 10px;">
+          <div style="font-size:11px; color:#64748b; margin-bottom:2px;">운용 기체</div>
+          <div id="camProjDrone" style="font-size:12px; font-weight:700; color:#1e293b;">DJI Mini 4 Pro (249g)</div>
+        </div>
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:8px 10px;">
+          <div style="font-size:11px; color:#64748b; margin-bottom:2px;">권장 카메라 레시피</div>
+          <div id="camProjRecipe" style="font-size:12px; font-weight:700; color:#2563eb;">4K 60fps · 1/240s · ISO 100</div>
+        </div>
+      </div>
+
+      <!-- Recommended Concept -->
+      <div style="background:#eff6ff; border-left:3px solid #2563eb; border-radius:0 8px 8px 0; padding:9px 12px; font-size:12px; color:#1e3a8a; line-height:1.5;">
+        <b>🎯 AI 추천 촬영 구도 & 컨셉</b><br>
+        <span id="camProjConcept">한강 와이드 Establishing Shot + 저고도 슬로우 트래킹 + 골든아워 매직아워 촬영</span>
+      </div>
+    </div>
+
+    <!-- Camera Connection Card -->
+    <div class="card">
+      <h2>카메라 연동 & 뷰파인더</h2>
+      <p class="sub">휴대폰 카메라 또는 촬영한 드론 영상을 연결하여 현장 촬영을 준비합니다.</p>
+      <div class="camera-box">
+        <div class="connection" id="connection"><i class="dot"></i><span>카메라 연결 대기</span></div>
+        <div class="camera-preview">
+          <video id="video" autoplay playsinline muted class="hidden"></video>
+          <span id="previewText">카메라 미리보기 영역</span>
+        </div>
+        <div class="camera-actions">
+          <button class="primary" id="openCameraPage" type="button">📸 스마트폰 카메라 연결</button>
+          <label class="secondary">📂 촬영 영상 불러오기<input id="videoFile" type="file" accept="video/*" hidden></label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Flight & Safety Checklist Card -->
+    <div class="card">
+      <h2>현장 비행 & 촬영 체크리스트</h2>
+      <p class="sub">촬영 전 안전한 운용을 위해 다음 항목을 점검하세요.</p>
+      <div class="metric"><span>고도 제한 준수</span><b>지표면 기준 150m 이하</b></div>
+      <div class="metric"><span>가시권 시계 비행</span><b>육안 가시거리 내 비행</b></div>
+      <div class="metric"><span>배터리 착륙 마진</span><b class="green">잔여 30% 시 귀환</b></div>
+      <div class="metric"><span>노을/야간 비행</span><b class="green">일몰 전 착륙 원칙</b></div>
+      <div class="recommend" style="margin-top:16px;">
+        <b>권한 및 연동 안내</b><br>
+        브라우저에서 카메라 권한을 허용하시면 실시간 뷰파인더를 확인할 수 있습니다. 드론 기체 제조사(DJI 등) 연동 시 모바일 앱 화면 미러링 또는 전송 케이블을 연결하세요.
+      </div>
+    </div>
+  </div>
+</section>
 <section id="community" class="page hidden"><div class="community-grid"><div class="card"><h2>사용자 커뮤니티</h2><p class="sub">드론 촬영 영상을 공유하고 다른 사용자의 구도와 촬영 방식을 참고하세요.</p><div class="community-toolbar"><select id="communityFilter"><option value="all">전체 영상</option><option value="landscape">경관·여행</option><option value="event">행사·기록</option><option value="cinematic">시네마틱</option></select><input id="communitySearch" placeholder="영상 제목·장소 검색"><button class="primary" id="newUpload">영상 업로드</button></div><div class="video-feed" id="videoFeed"><article class="video-card" data-category="landscape" data-search="한강 석양 서울 경관 시네마틱"><div class="video-thumb city"><div class="play">▶</div></div><div class="video-info"><h3>한강 석양을 따라가는 트래킹</h3><p>서울 한강공원 · 경관·여행</p><div class="video-meta"><span>♥ 128 · 조회 1,240</span><button class="like">♡ 좋아요</button></div></div></article><article class="video-card" data-category="cinematic" data-search="제주 해안 오빗 바다 시네마틱"><div class="video-thumb coast"><div class="play">▶</div></div><div class="video-info"><h3>제주 해안 오빗 무빙</h3><p>제주 애월 · 시네마틱</p><div class="video-meta"><span>♥ 96 · 조회 874</span><button class="like">♡ 좋아요</button></div></div></article><article class="video-card" data-category="landscape" data-search="숲길 상승 항공 풍경"><div class="video-thumb forest"><div class="play">▶</div></div><div class="video-info"><h3>숲길을 내려다보는 상승 샷</h3><p>강원도 인제 · 경관·여행</p><div class="video-meta"><span>♥ 74 · 조회 632</span><button class="like">♡ 좋아요</button></div></div></article><article class="video-card" data-category="event" data-search="졸업식 행사 기록 드론"><div class="video-thumb"><div class="play">▶</div></div><div class="video-info"><h3>캠퍼스 졸업식 전경 기록</h3><p>서울 ○○대학교 · 행사·기록</p><div class="video-meta"><span>♥ 51 · 조회 410</span><button class="like">♡ 좋아요</button></div></div></article></div><div class="community-note">※ 영상은 예시 데이터입니다. 실제 서비스에서는 업로드 파일 저장, 신고·공개 범위 설정, 저작권 및 개인정보 보호 검토가 필요합니다.</div></div><div><div class="card"><h2>선호 구도 분석</h2><p class="sub">커뮤니티 영상의 좋아요·조회·영상 메타데이터를 바탕으로 집계한 예시입니다.</p><div class="analysis-box"><div class="analysis-score"><span>가장 선호되는 구도</span><b class="green">와이드 트래킹</b></div><div class="bar"><i style="width:78%"></i></div><div class="tag-list"><span class="tag">넓은 풍경 78%</span><span class="tag">느린 전진 64%</span><span class="tag">수평 유지 61%</span></div></div><div class="metric"><span>선호 카메라 방향</span><b>정면·사선 58%</b></div><div class="metric"><span>선호 비행 무빙</span><b>트래킹·오빗</b></div><div class="metric"><span>선호 고도 범위</span><b>30~50m</b></div><div class="recommend" style="margin-top:16px"><b>추천 기능 반영 예정</b><br>다음 촬영 계획의 구도 추천 시, 사용자의 목적·장소·시간과 함께 커뮤니티에서 선호도가 높은 구도를 참고 데이터로 활용합니다.</div></div><div class="card" style="margin-top:18px"><h2>내 영상 공유</h2><p class="sub">촬영한 영상을 커뮤니티에 올려 선호 구도 분석에 참여하세요.</p><div class="upload-box"><div style="font-size:26px">＋</div><p>MP4, MOV 등 촬영 영상을 선택하세요.</p><label class="primary" style="display:inline-block">영상 선택<input id="communityUpload" type="file" accept="video/*" hidden></label><div id="uploadStatus" class="community-note"></div></div></div></div></div></section><div id="toast" class="toast">신청 내용을 불러왔습니다.</div></main></div>
 <script>
 const $=id=>document.getElementById(id);
@@ -448,6 +513,29 @@ function updateAiPlanSummary(card) {
   if (chipsContainer && d.tags) {
     const tagList = d.tags.split(',');
     chipsContainer.innerHTML = tagList.map(t => `<span class="chip">#${t.trim()}</span>`).join('');
+  }
+
+  // 5. Update Camera Page Top Project Briefing Card
+  if ($('camProjTitle')) $('camProjTitle').textContent = d.title || '촬영 프로젝트';
+  if ($('camProjPlace')) $('camProjPlace').textContent = `${d.place || ''} · ${d.purpose || ''}`;
+  if ($('camProjTime')) $('camProjTime').textContent = `${d.date || ''} ${d.time || ''}`;
+  if ($('camProjDrone')) $('camProjDrone').textContent = d.drone || 'DJI Mini 4 Pro';
+  if ($('camProjRecipe')) $('camProjRecipe').textContent = d.camera || '4K 60fps · 1/240s · ISO 100';
+  if ($('camProjConcept')) $('camProjConcept').textContent = d.concept || '';
+  if ($('camProjBadge')) {
+    if (suit === 'SUITABLE') {
+      $('camProjBadge').textContent = '🟢 자유 비행 적합';
+      $('camProjBadge').style.background = '#dcfce7';
+      $('camProjBadge').style.color = '#15803d';
+    } else if (suit === 'PROHIBITED') {
+      $('camProjBadge').textContent = '🔴 비행 금지 구역';
+      $('camProjBadge').style.background = '#fee2e2';
+      $('camProjBadge').style.color = '#b91c1c';
+    } else {
+      $('camProjBadge').textContent = '🟡 사전 승인 필요';
+      $('camProjBadge').style.background = '#fef3c7';
+      $('camProjBadge').style.color = '#92400e';
+    }
   }
 
   loadMobileKmaWeather(card);

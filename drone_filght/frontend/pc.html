@@ -9,7 +9,6 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 :root {
   --navy: #10233f;
@@ -1345,7 +1344,7 @@ button { cursor: pointer; }
             <span style="font-size:11px; color:var(--muted); font-weight:normal;">엔진 24시간 실시간 동작 중</span>
           </div>
           <div class="search-bar-wrap" style="margin-bottom:16px;">
-            <input type="text" id="mapSearchInput" class="search-input" placeholder="드론 비행을 희망하는 장소를 입력하세요 (예: 서울 여의도 한강공원, 부산 해운대, 제주도, 김천 율곡동)" value="">
+            <input type="text" id="mapSearchInput" class="search-input" placeholder="드론 비행을 희망하는 장소를 입력하세요 (예: 서울 여의도 한강공원, 부산 해운대, 제주도, 김천 율곡동)" value="" onkeydown="if(event.key==='Enter'){event.preventDefault();executeLocationSearch();}">
             <button id="mapSearchBtn" class="search-btn">🔍 안전 진단 실행</button>
           </div>
           <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:10px;">
@@ -1407,12 +1406,6 @@ button { cursor: pointer; }
                 <span id="mapModeBadge" style="font-size:11px; padding:2px 8px; border-radius:12px; font-weight:700; background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;">브이월드 실시간 진단 맵</span>
               </div>
               <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                <span id="leafletSubControls" style="display:inline-flex; align-items:center; gap:4px;">
-                  <button type="button" class="quick-btn" id="btnLayerVworldBase" style="padding:4px 10px; font-size:11px; font-weight:bold; background:#1e40af; color:#fff;" onclick="setMapLayer('vworldBase')">2D 지도</button>
-                  <button type="button" class="quick-btn" id="btnLayerVworldSat" style="padding:4px 10px; font-size:11px; background:#fff; color:#1e293b;" onclick="setMapLayer('vworldSat')">위성 영상</button>
-                  <button type="button" class="quick-btn" id="btnLayerBackup" style="padding:4px 10px; font-size:11px; background:#fff; color:#1e293b;" onclick="setMapLayer('backup')">백업 맵</button>
-                  <button type="button" class="quick-btn" id="btnVworldKeyConfig" style="padding:4px 8px; font-size:11px;" onclick="promptVworldApiKey()" title="VWorld API 키">🔑 키설정</button>
-                </span>
                 <a href="https://drone.onestop.go.kr/common/flightArea" target="_blank" style="font-size:11px; color:var(--blue); text-decoration:none; font-weight:700;">🌐 드론원스톱 공식 지도 ↗</a>
               </div>
             </div>
@@ -2116,23 +2109,18 @@ button { cursor: pointer; }
                 </div>
               </div>
 
-              <!-- QR Code and Mobile Connection Area -->
+              <!-- 계정 자동 연동 상태 카드 (QR 코드 제거) -->
               <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:12px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                   <span style="font-size:11.5px; font-weight:800; color:#1e40af;">프로젝트 ID:</span>
                   <code id="displayProjectId" style="font-size:12px; font-weight:800; background:#ffffff; border:1px solid #cbd5e1; padding:2px 6px; border-radius:6px; color:#0f172a;">DRONE_20261111_001</code>
                 </div>
-                <div style="margin-bottom:8px;">
-                  <span id="projectStatusBadge" style="font-size:10.5px; font-weight:700; background:#fef3c7; color:#92400e; padding:2px 7px; border-radius:10px;">스마트폰 연동 대기</span>
+                <div style="margin-bottom:8px; display:flex; align-items:center; justify-content:space-between;">
+                  <span id="projectStatusBadge" style="font-size:10.5px; font-weight:700; background:#ecfdf5; color:#047857; padding:2px 7px; border-radius:10px;">👤 계정 실시간 연동 중</span>
+                  <a href="mobile.html" target="_blank" style="font-size:11px; color:#2563eb; font-weight:700; text-decoration:none;">모바일 화면 열기 ↗</a>
                 </div>
-
-                <!-- QR canvas box -->
-                <div style="display:flex; align-items:center; gap:12px;">
-                  <div id="qrcodeCanvas" style="width:78px; height:78px; display:flex; align-items:center; justify-content:center; background:white; padding:4px; border:1px solid #cbd5e1; border-radius:8px; flex-shrink:0;"></div>
-                  <div style="font-size:11px; color:#475569; line-height:1.5;">
-                    스마트폰 카메라로 스캔 시 현장 AI 가이드로 즉시 연결됩니다.<br>
-                    <a id="qrDirectLink" href="camera.html" target="_blank" style="color:#2563eb; font-weight:700; text-decoration:none; display:inline-block; margin-top:4px;">모바일 화면 바로 열기 ↗</a>
-                  </div>
+                <div style="font-size:11.5px; color:#475569; line-height:1.5; background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:8px 10px;">
+                  모바일에서 동일한 로그인 계정으로 접속하시면 본 프로젝트가 자동으로 조회되며 촬영 결과를 실시간 동기화합니다.
                 </div>
 
                 <!-- Synced mobile result box -->
@@ -3639,10 +3627,8 @@ function openDocInNewTab() {
 /* -------------------------------------------------------------
  * 4. Interactive Map & Diagnosis Logic (View 1) - VWorld & Drone One-Stop Integration
  * ------------------------------------------------------------- */
-let currentMapMode = 'leaflet'; // Leaflet VWorld Map
+let currentMapMode = 'leaflet'; // Leaflet VWorld 2D Map
 let currentTileLayer = null;
-let currentTileLayerType = 'vworldBase'; // 'vworldBase', 'vworldSat', 'backup'
-let vworldApiKey = localStorage.getItem('vworld_api_key') || '';
 
 function switchMapMode(mode) {
   currentMapMode = 'leaflet';
@@ -3655,107 +3641,20 @@ function switchMapMode(mode) {
   }
 }
 
-function getVworldKey() {
-  return vworldApiKey || localStorage.getItem('vworld_api_key') || '';
-}
-
-function promptVworldApiKey() {
-  const current = getVworldKey();
-  const input = prompt(
-    '국토교통부 브이월드(VWorld) 오픈API 인증키를 입력해주세요.\n(공식 홈페이지 vworld.kr -> 마이페이지 -> 오픈API 인증키 발급)\n\n* 등록 도메인: localhost:5500 또는 배포 도메인\n* 키가 없거나 미입력 시에도 403 차단 없는 고해상도 지도로 안전하게 자동 전환됩니다.',
-    current
-  );
-  if (input !== null) {
-    vworldApiKey = input.trim();
-    if (vworldApiKey) {
-      localStorage.setItem('vworld_api_key', vworldApiKey);
-      toast('브이월드 인증키가 저장되었습니다. 지도를 갱신합니다.');
-    } else {
-      localStorage.removeItem('vworld_api_key');
-      toast('브이월드 인증키가 초기화되었습니다. 기본 지도로 연결합니다.');
-    }
-    setMapLayer(currentTileLayerType);
-  }
-}
-
-function setMapLayer(type) {
+function setMapLayer() {
   if (!mapInstance) return;
-  currentTileLayerType = type;
-
-  // Update UI buttons
-  ['btnLayerVworldBase', 'btnLayerVworldSat', 'btnLayerBackup'].forEach(id => {
-    const el = $(id);
-    if (el) {
-      el.style.background = '#ffffff';
-      el.style.color = '#1e293b';
-      el.style.fontWeight = 'normal';
-    }
-  });
-
-  const activeBtnId = type === 'vworldBase' ? 'btnLayerVworldBase' : type === 'vworldSat' ? 'btnLayerVworldSat' : 'btnLayerBackup';
-  const activeBtn = $(activeBtnId);
-  if (activeBtn) {
-    activeBtn.style.background = '#1e40af';
-    activeBtn.style.color = '#ffffff';
-    activeBtn.style.fontWeight = 'bold';
-  }
-
   if (currentTileLayer) {
     try { mapInstance.removeLayer(currentTileLayer); } catch(e) {}
     currentTileLayer = null;
   }
 
-  const key = getVworldKey();
-
-  if (type === 'vworldBase') {
-    // 1. 브이월드 일반 2D 타일 레이어
-    let tileUrl = key 
-      ? `https://api.vworld.kr/req/wmts/1.0.0/${key}/Base/{z}/{y}/{x}.png`
-      : 'https://xdworld.vworld.kr/2d/Base/service/{z}/{x}/{y}.png';
-    
-    currentTileLayer = L.tileLayer(tileUrl, {
-      maxZoom: key ? 19 : 14,
-      minZoom: 6,
-      attribution: '© 국토교통부 VWorld 2D, 드론원스톱 공역'
-    });
-
-    let failCount = 0;
-    currentTileLayer.on('tileerror', function() {
-      failCount++;
-      if (failCount >= 3) {
-        console.warn('VWorld 타일 응답(403/404) 감지. 고해상도 백업 지도로 자동 복구합니다.');
-        setMapLayer('backup');
-      }
-    });
-  } else if (type === 'vworldSat') {
-    // 2. 브이월드 항공위성 영상
-    let tileUrl = key 
-      ? `https://api.vworld.kr/req/wmts/1.0.0/${key}/Satellite/{z}/{y}/{x}.jpeg`
-      : 'https://xdworld.vworld.kr/2d/Satellite/service/{z}/{x}/{y}.jpeg';
-    
-    currentTileLayer = L.tileLayer(tileUrl, {
-      maxZoom: key ? 19 : 14,
-      minZoom: 6,
-      attribution: '© 국토교통부 VWorld 위성, 드론원스톱 공역'
-    });
-
-    let failCount = 0;
-    currentTileLayer.on('tileerror', function() {
-      failCount++;
-      if (failCount >= 3) {
-        setMapLayer('backup');
-      }
-    });
-  } else {
-    // 3. 글로벌 고해상도 백업 타일 (CartoDB Voyager - 403 차단 없음, 대한민국 전역 고화질 지원)
-    currentTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19,
-      minZoom: 5,
-      subdomains: 'abcd',
-      attribution: '© CartoDB, OpenStreetMap contributors'
-    });
-  }
-
+  // 국토교통부 브이월드 2D 표준 타일 레이어로 단일화
+  const tileUrl = 'https://xdworld.vworld.kr/2d/Base/service/{z}/{x}/{y}.png';
+  currentTileLayer = L.tileLayer(tileUrl, {
+    maxZoom: 19,
+    minZoom: 6,
+    attribution: '© 국토교통부 VWorld 2D, 드론원스톱 공역'
+  });
   currentTileLayer.addTo(mapInstance);
 }
 
@@ -3766,8 +3665,8 @@ function initMap() {
   // Initialize Leaflet Map centered on Korea
   mapInstance = L.map(target).setView([36.3, 127.8], 7);
 
-  // Set default map layer with VWorld & safe fallback
-  setMapLayer(currentTileLayerType || 'vworldBase');
+  // Set 2D VWorld map layer
+  setMapLayer();
 }
 
 let currentCenterDot = null;
@@ -4198,7 +4097,12 @@ async function executeLocationSearch() {
 }
 
 $('mapSearchBtn').addEventListener('click', executeLocationSearch);
-$('mapSearchInput').addEventListener('keypress', e => { if (e.key === 'Enter') executeLocationSearch(); });
+$('mapSearchInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    executeLocationSearch();
+  }
+});
 
 /* =============================================================
  * 4. Advanced 5-Step Flight Safety Decision Engine
@@ -6465,25 +6369,11 @@ function initProjectSync() {
 }
 
 function renderProjectQr(projCode) {
-  const container = $('qrcodeCanvas');
-  if (!container) return;
-  container.innerHTML = '';
-  
-  const directUrl = `${window.location.origin}/camera.html?project_code=${projCode}&token=sec_token_${Date.now().toString(36)}`;
-  $('displayProjectId').textContent = projCode;
-  $('qrDirectLink').href = directUrl;
-
-  if (typeof QRCode !== 'undefined') {
-    new QRCode(container, {
-      text: directUrl,
-      width: 110,
-      height: 110,
-      colorDark: '#10233f',
-      colorLight: '#ffffff',
-      correctLevel: QRCode.CorrectLevel.M
-    });
-  } else {
-    container.innerHTML = `<span style="font-size:10px; color:#64748b;">QR 생성 중...</span>`;
+  if ($('displayProjectId')) $('displayProjectId').textContent = projCode;
+  if ($('projectStatusBadge')) {
+    $('projectStatusBadge').textContent = '👤 계정 실시간 연동 중';
+    $('projectStatusBadge').style.background = '#ecfdf5';
+    $('projectStatusBadge').style.color = '#047857';
   }
 }
 
