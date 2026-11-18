@@ -214,8 +214,11 @@ class AuthService:
     # 5. 사용자 인증 및 로그인 처리
     # ==========================================
     def authenticate_user(self, db: Session, username: str, plain_password: str) -> Optional[User]:
-        """사용자 아이디와 비밀번호를 검증하여 일치 시 User 객체를 반환합니다."""
-        user = db.query(User).filter(User.username == username).first()
+        """사용자 아이디(또는 이메일)와 비밀번호를 검증하여 일치 시 User 객체를 반환합니다."""
+        clean_target = (username or "").strip()
+        user = db.query(User).filter(
+            (User.username == clean_target) | (User.email == clean_target)
+        ).first()
         if not user:
             return None
         if not user.is_active:

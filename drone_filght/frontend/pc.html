@@ -1237,6 +1237,30 @@ button { cursor: pointer; }
       </div>
     </div>
 
+    <!-- 사이드바 사용자 로그인 / 계정 프로필 영역 -->
+    <div id="sidebarAuthArea" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.18); border-radius: 12px; padding: 12px; margin-bottom: 12px;">
+      <div id="sidebarLoggedOut" style="display:flex; flex-direction:column; gap:8px;">
+        <div style="font-size:11px; color:#cbd5e1; display:flex; align-items:center; gap:6px;">
+          <span>🔒</span> <span>로그인이 필요합니다</span>
+        </div>
+        <button type="button" onclick="openAuthModal('login')" style="background:#2563eb; color:#fff; border:none; border-radius:8px; padding:9px 12px; font-weight:700; font-size:12px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; box-shadow:0 2px 8px rgba(37,99,235,0.4); transition:background 0.2s;">
+          👤 로그인 / 회원가입
+        </button>
+      </div>
+      <div id="sidebarLoggedIn" style="display:none; flex-direction:column; gap:8px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <div style="width:30px; height:30px; border-radius:50%; background:#2563eb; color:#fff; display:grid; place-items:center; font-weight:700; font-size:13px;" id="sidebarUserAvatar">A</div>
+          <div style="overflow:hidden; flex:1;">
+            <div style="font-size:12px; font-weight:700; color:#fff; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;" id="sidebarUserEmail">aaa@test.com</div>
+            <div style="font-size:10px; color:#93c5fd;">드론 조종사 (인증회원)</div>
+          </div>
+        </div>
+        <button type="button" onclick="handleLogout()" style="background:rgba(239,68,68,0.2); color:#fca5a5; border:1px solid rgba(239,68,68,0.3); border-radius:6px; padding:5px 8px; font-size:11px; font-weight:600; cursor:pointer;">
+          로그아웃
+        </button>
+      </div>
+    </div>
+
     <div>
       <div class="nav-label">메인 메뉴</div>
       <!-- 1번: 비행 적합성 분석 (기본 활성화) -->
@@ -1277,8 +1301,20 @@ button { cursor: pointer; }
         </button>
         <div class="crumb">스카이 커맨드　/　<strong id="topCrumb">비행 적합성 분석</strong></div>
       </div>
-      <div class="top-status">
-        <span class="dot"></span>실시간 공역 관제 및 AI 어시스턴트 정상 가동
+      <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+        <div class="top-status">
+          <span class="dot"></span>실시간 공역 관제 및 AI 어시스턴트 정상 가동
+        </div>
+        <!-- 사용자 로그인 / 계정 상태 바 -->
+        <div id="authArea" style="display:inline-flex; align-items:center;">
+          <button type="button" id="btnAuthOpen" class="quick-btn" style="background:#1e40af; color:#ffffff; font-weight:700; padding:6px 14px; border-radius:8px; display:inline-flex; align-items:center; gap:6px; font-size:12px; cursor:pointer; border:1px solid #1d4ed8; box-shadow:0 2px 4px rgba(30,64,175,0.2);" onclick="openAuthModal('login')">
+            👤 로그인 / 회원가입
+          </button>
+          <div id="loggedInUserBar" style="display:none; align-items:center; gap:8px;">
+            <span id="lblLoggedInUser" style="font-size:12px; font-weight:700; color:#1e293b; background:#f1f5f9; padding:5px 10px; border-radius:8px; border:1px solid #cbd5e1;">👤 aaa@test.com</span>
+            <button type="button" id="btnLogout" class="quick-btn" style="background:#fef2f2; color:#dc2626; font-weight:700; padding:5px 10px; border-radius:8px; border:1px solid #fecaca; font-size:11px; cursor:pointer;" onclick="handleLogout()">로그아웃</button>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -5966,15 +6002,249 @@ if (btnCreate) btnCreate.addEventListener('click', createNewShootingProject);
 const btnSim = $('btnSimulateSync');
 if (btnSim) btnSim.addEventListener('click', simulateMobileSync);
 
+/* ======================================================== */
+/* 사용자 인증 & 로그인 / 회원가입 제어 로직                */
+/* ======================================================== */
+let currentAuthMode = 'login';
+let currentUser = null;
+
+function openAuthModal(mode = 'login') {
+  const modal = $('authModal');
+  if (modal) modal.style.display = 'flex';
+  switchAuthMode(mode);
+}
+
+function closeAuthModal() {
+  const modal = $('authModal');
+  if (modal) modal.style.display = 'none';
+  const err = $('authErrorMessage');
+  if (err) err.style.display = 'none';
+}
+
+function switchAuthMode(mode) {
+  currentAuthMode = mode;
+  const tabLogin = $('tabAuthLogin');
+  const tabReg = $('tabAuthRegister');
+  const nameField = $('authFieldFullName');
+  const title = $('authModalTitle');
+  const btn = $('authSubmitBtn');
+  const err = $('authErrorMessage');
+  if (err) err.style.display = 'none';
+
+  if (mode === 'login') {
+    if (tabLogin) {
+      tabLogin.style.background = '#ffffff';
+      tabLogin.style.color = '#1e40af';
+      tabLogin.style.fontWeight = '700';
+      tabLogin.style.boxShadow = '0 1px 3px rgba(0,0,0,0.08)';
+    }
+    if (tabReg) {
+      tabReg.style.background = 'transparent';
+      tabReg.style.color = '#64748b';
+      tabReg.style.fontWeight = '600';
+      tabReg.style.boxShadow = 'none';
+    }
+    if (nameField) nameField.style.display = 'none';
+    if (title) title.textContent = '스카이 커맨드 조종사 로그인';
+    if (btn) btn.textContent = '로그인';
+  } else {
+    if (tabReg) {
+      tabReg.style.background = '#ffffff';
+      tabReg.style.color = '#1e40af';
+      tabReg.style.fontWeight = '700';
+      tabReg.style.boxShadow = '0 1px 3px rgba(0,0,0,0.08)';
+    }
+    if (tabLogin) {
+      tabLogin.style.background = 'transparent';
+      tabLogin.style.color = '#64748b';
+      tabLogin.style.fontWeight = '600';
+      tabLogin.style.boxShadow = 'none';
+    }
+    if (nameField) nameField.style.display = 'block';
+    if (title) title.textContent = '스카이 커맨드 회원가입';
+    if (btn) btn.textContent = '1초 회원가입 완료';
+  }
+}
+
+async function submitAuthForm() {
+  const emailInput = $('authInputEmail');
+  const passwordInput = $('authInputPassword');
+  const nameInput = $('authInputFullName');
+  const errBox = $('authErrorMessage');
+  const submitBtn = $('authSubmitBtn');
+
+  const email = (emailInput ? emailInput.value : '').trim();
+  const password = (passwordInput ? passwordInput.value : '').trim();
+  const fullName = (nameInput ? nameInput.value : '').trim() || '드론 조종사';
+
+  if (!email || !password) {
+    if (errBox) {
+      errBox.textContent = '이메일과 비밀번호를 모두 입력해 주세요.';
+      errBox.style.display = 'block';
+    }
+    return;
+  }
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = '인증 처리 중...';
+  }
+
+  try {
+    if (currentAuthMode === 'login') {
+      const resp = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: email, password: password })
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        throw new Error(data.detail || '로그인에 실패했습니다. 아이디 또는 비밀번호를 확인해 주세요.');
+      }
+      localStorage.setItem('sky_auth_token', data.access_token);
+      localStorage.setItem('sky_auth_user', JSON.stringify({
+        user_id: data.user_id,
+        username: data.username,
+        email: email,
+        role: data.role
+      }));
+      updateAuthUI();
+      closeAuthModal();
+      toast(`🎉 환영합니다! [${email}] 계정으로 정상 로그인되었습니다.`);
+    } else {
+      const resp = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: email,
+          email: email,
+          password: password,
+          full_name: fullName,
+          role: 'pilot',
+          drone_model: 'DJI Mini 4 Pro',
+          drone_weight_g: 249
+        })
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        throw new Error(data.detail || '회원가입에 실패했습니다.');
+      }
+      toast('🎉 회원가입이 완료되었습니다! 바로 로그인합니다.');
+      switchAuthMode('login');
+      await submitAuthForm();
+      return;
+    }
+  } catch (e) {
+    if (errBox) {
+      errBox.textContent = e.message || '오류가 발생했습니다.';
+      errBox.style.display = 'block';
+    }
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = currentAuthMode === 'login' ? '로그인' : '1초 회원가입 완료';
+    }
+  }
+}
+
+function updateAuthUI() {
+  const savedUserJson = localStorage.getItem('sky_auth_user');
+  const btnAuthOpen = $('btnAuthOpen');
+  const loggedInBar = $('loggedInUserBar');
+  const lblUser = $('lblLoggedInUser');
+  const sidebarLoggedOut = $('sidebarLoggedOut');
+  const sidebarLoggedIn = $('sidebarLoggedIn');
+  const sidebarUserEmail = $('sidebarUserEmail');
+  const sidebarUserAvatar = $('sidebarUserAvatar');
+
+  if (savedUserJson) {
+    try {
+      currentUser = JSON.parse(savedUserJson);
+      if (btnAuthOpen) btnAuthOpen.style.display = 'none';
+      if (loggedInBar) loggedInBar.style.display = 'inline-flex';
+      const displayName = currentUser.username || currentUser.email || '조종사';
+      if (lblUser) lblUser.innerHTML = `👤 <b>${displayName}</b>`;
+      if (sidebarLoggedOut) sidebarLoggedOut.style.display = 'none';
+      if (sidebarLoggedIn) sidebarLoggedIn.style.display = 'flex';
+      if (sidebarUserEmail) sidebarUserEmail.textContent = displayName;
+      if (sidebarUserAvatar) sidebarUserAvatar.textContent = (displayName[0] || 'U').toUpperCase();
+      return;
+    } catch(e) {}
+  }
+  currentUser = null;
+  if (btnAuthOpen) btnAuthOpen.style.display = 'inline-flex';
+  if (loggedInBar) loggedInBar.style.display = 'none';
+  if (sidebarLoggedOut) sidebarLoggedOut.style.display = 'flex';
+  if (sidebarLoggedIn) sidebarLoggedIn.style.display = 'none';
+}
+
+function handleLogout() {
+  localStorage.removeItem('sky_auth_token');
+  localStorage.removeItem('sky_auth_user');
+  currentUser = null;
+  updateAuthUI();
+  toast('로그아웃되었습니다.');
+}
+
 window.addEventListener('DOMContentLoaded', () => {
   initProjectSync();
   initMap();
   updateSummaryCard();
   loadHistory();
+  updateAuthUI();
   // Start First Greeting in Chatbot
   addMessage('안녕하세요! 저는 스카이 커맨드 비행 도우미에요!\n궁금한 점이나 비행 계획 신청서 초안을 만드실 때 등의 목적으로 입력해주세요!');
   askCurrentStep();
 });
 </script>
+
+  <!-- ========================================== -->
+  <!-- AUTH MODAL (조종사 로그인 & 간편 회원가입 모달) -->
+  <!-- ========================================== -->
+  <div id="authModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.65); z-index:99999; justify-content:center; align-items:center; backdrop-filter:blur(3px);">
+    <div style="background:#ffffff; border-radius:16px; width:90%; max-width:400px; padding:24px; box-shadow:0 20px 40px rgba(0,0,0,0.2); position:relative; border:1px solid #e2e8f0;">
+      <button type="button" onclick="closeAuthModal()" style="position:absolute; top:16px; right:16px; background:transparent; border:none; font-size:18px; color:#64748b; cursor:pointer; font-weight:700;">✕</button>
+      
+      <div style="text-align:center; margin-bottom:20px;">
+        <div style="font-size:28px; margin-bottom:6px;">🛸</div>
+        <h3 id="authModalTitle" style="margin:0 0 4px 0; font-size:18px; color:#0f172a; font-weight:800;">스카이 커맨드 조종사 로그인</h3>
+        <p style="margin:0; font-size:12px; color:#64748b;">PC와 모바일 간의 비행 및 촬영 프로젝트를 계정 기반으로 자동 동기화합니다.</p>
+      </div>
+
+      <!-- Mode Tabs (로그인 vs 회원가입) -->
+      <div style="display:flex; background:#f1f5f9; padding:4px; border-radius:10px; margin-bottom:16px;">
+        <button type="button" id="tabAuthLogin" style="flex:1; padding:8px 0; border:none; border-radius:8px; font-size:12px; font-weight:700; background:#ffffff; color:#1e40af; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,0.08);" onclick="switchAuthMode('login')">로그인</button>
+        <button type="button" id="tabAuthRegister" style="flex:1; padding:8px 0; border:none; border-radius:8px; font-size:12px; font-weight:600; background:transparent; color:#64748b; cursor:pointer;" onclick="switchAuthMode('register')">회원가입</button>
+      </div>
+
+      <!-- Form Inputs -->
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <div id="authFieldFullName" style="display:none;">
+          <label style="display:block; font-size:12px; font-weight:700; color:#334155; margin-bottom:4px;">조종사 이름</label>
+          <input type="text" id="authInputFullName" placeholder="홍길동" style="width:100%; padding:10px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; outline:none; box-sizing:border-box;">
+        </div>
+
+        <div>
+          <label style="display:block; font-size:12px; font-weight:700; color:#334155; margin-bottom:4px;">이메일 (아이디)</label>
+          <input type="email" id="authInputEmail" placeholder="aaa@test.com" value="aaa@test.com" style="width:100%; padding:10px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; outline:none; box-sizing:border-box;">
+        </div>
+
+        <div>
+          <label style="display:block; font-size:12px; font-weight:700; color:#334155; margin-bottom:4px;">비밀번호</label>
+          <input type="password" id="authInputPassword" placeholder="비밀번호를 입력하세요" value="a123456" style="width:100%; padding:10px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; outline:none; box-sizing:border-box;">
+        </div>
+
+        <div id="authErrorMessage" style="display:none; color:#dc2626; font-size:12px; background:#fef2f2; border:1px solid #fecaca; border-radius:6px; padding:8px 10px;"></div>
+
+        <button type="button" id="authSubmitBtn" onclick="submitAuthForm()" style="width:100%; margin-top:8px; padding:12px 0; background:#1e40af; color:#ffffff; font-weight:700; font-size:14px; border:none; border-radius:8px; cursor:pointer; transition:background 0.2s;">
+          로그인
+        </button>
+      </div>
+
+      <div style="margin-top:14px; text-align:center; font-size:11px; color:#94a3b8;">
+        💡 테스트 등록 계정: <b>aaa@test.com</b> / <b>a123456</b>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

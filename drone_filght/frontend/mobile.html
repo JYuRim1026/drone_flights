@@ -18,7 +18,12 @@
     <span>🛸 날려드려 모바일 도우미</span>
     <span style="font-size:10px; background:#16a36a; color:white; padding:1px 6px; border-radius:10px;">온라인</span>
   </div>
-  <div style="display:flex; gap:6px;">
+  <div style="display:flex; gap:6px; align-items:center;">
+    <button type="button" id="mBtnAuthOpen" onclick="openAuthModal('login')" style="background:#2563eb; color:#fff; border:none; padding:4px 10px; border-radius:99px; font-weight:700; font-size:11px; cursor:pointer;">👤 로그인</button>
+    <div id="mLoggedInBar" style="display:none; align-items:center; gap:5px; font-size:11px; color:#93c5fd;">
+      👤 <b id="mLblUser">aaa@test.com</b>
+      <button type="button" onclick="handleLogout()" style="background:transparent; border:none; color:#fca5a5; font-size:10px; text-decoration:underline; cursor:pointer; padding:0 2px;">로그아웃</button>
+    </div>
     <a href="camera.html" style="background:#2f75ff; color:white; padding:4px 10px; border-radius:99px; text-decoration:none; font-weight:700; font-size:11px;">📸 카메라 가이드</a>
     <a href="pc.html" style="background:rgba(255,255,255,0.18); color:white; padding:4px 10px; border-radius:99px; text-decoration:none; font-weight:700; font-size:11px;">💻 PC 관제</a>
   </div>
@@ -529,5 +534,191 @@ function loadUploadedVideos() {
 loadUploadedVideos();
 const initialSelectedCard = document.querySelector('.application.selected');
 if (initialSelectedCard) updateAiPlanSummary(initialSelectedCard);
+
+/* =================================================== */
+/* Mobile Auth State & Modal Handlers */
+/* =================================================== */
+let currentAuthMode = 'login';
+function openAuthModal(mode) {
+  currentAuthMode = mode || 'login';
+  const modal = document.getElementById('mAuthModal');
+  if (modal) modal.style.display = 'flex';
+  switchAuthMode(currentAuthMode);
+}
+function closeAuthModal() {
+  const modal = document.getElementById('mAuthModal');
+  if (modal) modal.style.display = 'none';
+  const errBox = document.getElementById('mAuthErrorMessage');
+  if (errBox) errBox.style.display = 'none';
+}
+function switchAuthMode(mode) {
+  currentAuthMode = mode;
+  const tabLogin = document.getElementById('mTabAuthLogin');
+  const tabReg = document.getElementById('mTabAuthRegister');
+  const nameField = document.getElementById('mAuthFieldFullName');
+  const submitBtn = document.getElementById('mAuthSubmitBtn');
+  const modalTitle = document.getElementById('mAuthModalTitle');
+  const errBox = document.getElementById('mAuthErrorMessage');
+  if (errBox) errBox.style.display = 'none';
+
+  if (mode === 'login') {
+    if (tabLogin) { tabLogin.style.background = '#ffffff'; tabLogin.style.color = '#1e40af'; }
+    if (tabReg) { tabReg.style.background = 'transparent'; tabReg.style.color = '#64748b'; }
+    if (nameField) nameField.style.display = 'none';
+    if (submitBtn) submitBtn.textContent = '로그인';
+    if (modalTitle) modalTitle.textContent = '스카이 커맨드 모바일 로그인';
+  } else {
+    if (tabLogin) { tabLogin.style.background = 'transparent'; tabLogin.style.color = '#64748b'; }
+    if (tabReg) { tabReg.style.background = '#ffffff'; tabReg.style.color = '#1e40af'; }
+    if (nameField) nameField.style.display = 'block';
+    if (submitBtn) submitBtn.textContent = '1초 회원가입 완료';
+    if (modalTitle) modalTitle.textContent = '스카이 커맨드 간편 회원가입';
+  }
+}
+async function submitAuthForm() {
+  const email = document.getElementById('mAuthInputEmail')?.value?.trim();
+  const password = document.getElementById('mAuthInputPassword')?.value?.trim();
+  const fullName = document.getElementById('mAuthInputFullName')?.value?.trim();
+  const errBox = document.getElementById('mAuthErrorMessage');
+  const submitBtn = document.getElementById('mAuthSubmitBtn');
+
+  if (!email || !password) {
+    if (errBox) {
+      errBox.textContent = '이메일과 비밀번호를 모두 입력해주세요.';
+      errBox.style.display = 'block';
+    }
+    return;
+  }
+  if (currentAuthMode === 'register' && !fullName) {
+    if (errBox) {
+      errBox.textContent = '조종사 이름을 입력해주세요.';
+      errBox.style.display = 'block';
+    }
+    return;
+  }
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = '처리 중...';
+  }
+  if (errBox) errBox.style.display = 'none';
+
+  const baseUrl = window.location.origin.includes(':5500') ? 'http://localhost:8000' : '';
+
+  try {
+    if (currentAuthMode === 'login') {
+      const resp = await fetch(`${baseUrl}/api/v1/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, username: email })
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        throw new Error(data.detail || '로그인에 실패했습니다. 아이디와 비밀번호를 확인해주세요.');
+      }
+      localStorage.setItem('sky_auth_token', data.access_token);
+      localStorage.setItem('sky_auth_user', JSON.stringify(data.user));
+      updateAuthUI();
+      closeAuthModal();
+      toast(`환영합니다, ${data.user.username || data.user.email}님!`);
+    } else {
+      const resp = await fetch(`${baseUrl}/api/v1/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: fullName,
+          email: email,
+          password: password,
+          role: 'pilot',
+          drone_model: 'DJI Mini 4 Pro',
+          drone_weight_g: 249
+        })
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        throw new Error(data.detail || '회원가입에 실패했습니다.');
+      }
+      toast('🎉 회원가입 완료! 바로 로그인합니다.');
+      switchAuthMode('login');
+      await submitAuthForm();
+    }
+  } catch(e) {
+    if (errBox) {
+      errBox.textContent = e.message || '오류가 발생했습니다.';
+      errBox.style.display = 'block';
+    }
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = currentAuthMode === 'login' ? '로그인' : '1초 회원가입 완료';
+    }
+  }
+}
+function updateAuthUI() {
+  const savedUserJson = localStorage.getItem('sky_auth_user');
+  const btnAuthOpen = document.getElementById('mBtnAuthOpen');
+  const loggedInBar = document.getElementById('mLoggedInBar');
+  const lblUser = document.getElementById('mLblUser');
+
+  if (savedUserJson) {
+    try {
+      const user = JSON.parse(savedUserJson);
+      if (btnAuthOpen) btnAuthOpen.style.display = 'none';
+      if (loggedInBar) loggedInBar.style.display = 'inline-flex';
+      if (lblUser) lblUser.textContent = user.username || user.email || '조종사';
+      return;
+    } catch(e) {}
+  }
+  if (btnAuthOpen) btnAuthOpen.style.display = 'inline-flex';
+  if (loggedInBar) loggedInBar.style.display = 'none';
+}
+function handleLogout() {
+  localStorage.removeItem('sky_auth_token');
+  localStorage.removeItem('sky_auth_user');
+  updateAuthUI();
+  toast('로그아웃되었습니다.');
+}
+updateAuthUI();
 </script>
+
+<!-- Mobile Auth Modal -->
+<div id="mAuthModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.7); z-index:99999; justify-content:center; align-items:center; backdrop-filter:blur(3px); padding:16px;">
+  <div style="background:#ffffff; border-radius:18px; width:100%; max-width:380px; padding:22px; box-shadow:0 20px 40px rgba(0,0,0,0.3); position:relative; box-sizing:border-box;">
+    <button type="button" onclick="closeAuthModal()" style="position:absolute; top:14px; right:14px; background:transparent; border:none; font-size:20px; color:#64748b; cursor:pointer; font-weight:700;">✕</button>
+    <div style="text-align:center; margin-bottom:16px;">
+      <div style="font-size:26px; margin-bottom:4px;">🛸</div>
+      <h3 id="mAuthModalTitle" style="margin:0 0 4px 0; font-size:17px; color:#0f172a; font-weight:800;">스카이 커맨드 모바일 로그인</h3>
+      <p style="margin:0; font-size:11px; color:#64748b;">PC에서 신청한 비행·촬영 계획을 실시간 동기화합니다.</p>
+    </div>
+
+    <div style="display:flex; background:#f1f5f9; padding:4px; border-radius:10px; margin-bottom:14px;">
+      <button type="button" id="mTabAuthLogin" style="flex:1; padding:7px 0; border:none; border-radius:8px; font-size:12px; font-weight:700; background:#ffffff; color:#1e40af; cursor:pointer;" onclick="switchAuthMode('login')">로그인</button>
+      <button type="button" id="mTabAuthRegister" style="flex:1; padding:7px 0; border:none; border-radius:8px; font-size:12px; font-weight:600; background:transparent; color:#64748b; cursor:pointer;" onclick="switchAuthMode('register')">회원가입</button>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <div id="mAuthFieldFullName" style="display:none;">
+        <label style="display:block; font-size:11px; font-weight:700; color:#334155; margin-bottom:3px;">조종사 이름</label>
+        <input type="text" id="mAuthInputFullName" placeholder="홍길동" style="width:100%; padding:9px 11px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; outline:none; box-sizing:border-box;">
+      </div>
+      <div>
+        <label style="display:block; font-size:11px; font-weight:700; color:#334155; margin-bottom:3px;">이메일 (아이디)</label>
+        <input type="email" id="mAuthInputEmail" placeholder="aaa@test.com" value="aaa@test.com" style="width:100%; padding:9px 11px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; outline:none; box-sizing:border-box;">
+      </div>
+      <div>
+        <label style="display:block; font-size:11px; font-weight:700; color:#334155; margin-bottom:3px;">비밀번호</label>
+        <input type="password" id="mAuthInputPassword" placeholder="비밀번호" value="a123456" style="width:100%; padding:9px 11px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; outline:none; box-sizing:border-box;">
+      </div>
+
+      <div id="mAuthErrorMessage" style="display:none; color:#dc2626; font-size:11px; background:#fef2f2; border:1px solid #fecaca; border-radius:6px; padding:7px 9px;"></div>
+
+      <button type="button" id="mAuthSubmitBtn" onclick="submitAuthForm()" style="width:100%; margin-top:6px; padding:11px 0; background:#2563eb; color:#ffffff; font-weight:700; font-size:13px; border:none; border-radius:8px; cursor:pointer;">
+        로그인
+      </button>
+    </div>
+    <div style="margin-top:12px; text-align:center; font-size:11px; color:#94a3b8;">
+      💡 테스트 등록 계정: <b>aaa@test.com</b> / <b>a123456</b>
+    </div>
+  </div>
+</div>
 </body></html>

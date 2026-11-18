@@ -4,8 +4,11 @@ from backend.models.models import (
     FlightRequest,
     AirspaceZone,
     ShootingProject,
-    ShootingAnalysis
+    FlightGuideLog
 )
+
+# 기존 shooting_analyses 통합에 따른 호환용 별칭
+ShootingAnalysis = ShootingProject
 
 __all__ = [
     "User",
@@ -13,5 +16,6 @@ __all__ = [
     "FlightRequest",
     "AirspaceZone",
     "ShootingProject",
+    "FlightGuideLog",
     "ShootingAnalysis"
 ]
