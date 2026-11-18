@@ -1,7 +1,14 @@
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
 from backend.models.models import ShootingProject, ShootingAnalysis
-from backend.schemas.schemas import AnalyzeRequest, AnalyzeResponse, RecommendationResponse, AnalysisResultCreate
+from backend.schemas.schemas import (
+    AnalyzeRequest,
+    AnalyzeResponse,
+    RecommendationResponse,
+    AnalysisResultCreate,
+    ShootingProjectCreate,
+    MobileProjectDetailResponse
+)
 from fastapi import HTTPException
 
 class MobileService:
@@ -28,6 +35,70 @@ class MobileService:
             db.refresh(default_p)
             projects = [default_p]
         return projects
+
+    @staticmethod
+    def get_mobile_project_detail(db: Session, project_id: int) -> Dict[str, Any]:
+        """
+        [Step 1] 모바일 촬영 도우미: PC에서 생성된 특정 촬영 프로젝트를 선택하여
+        촬영 목적, 장소, 촬영 시간, 원하는 구도 및 이전 AI 분석 여부를 불러옵니다.
+        """
+        project = db.query(ShootingProject).filter(
+            (ShootingProject.id == project_id) | (ShootingProject.project_id == project_id)
+        ).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="해당 촬영 프로젝트를 찾을 수 없습니다.")
+
+        # 해당 프로젝트의 최신 AI 실시간 영상 분석 결과(shooting_analyses) 존재 여부 확인
+        latest_analysis = db.query(ShootingAnalysis).filter(
+            ShootingAnalysis.project_id == project.project_id
+        ).order_by(ShootingAnalysis.created_at.desc()).first()
+
+        return {
+            "id": project.project_id,
+            "project_id": project.project_id,
+            "title": project.project_name or project.title or "촬영 프로젝트",
+            "place_name": project.shooting_location or project.place_name or "촬영 장소 미정",
+            "target_date": project.target_date or "2026-10-24",
+            "target_time": project.target_time or "14:00 ~ 16:00",
+            "scene_intent": project.shooting_purpose or project.scene_intent or "기본 시네마틱 촬영",
+            "recommended_mode": project.recommended_composition or project.recommended_mode or "삼등분의 법칙 (Rule of Thirds)",
+            "recommended_shutter": project.recommended_shutter or "1/50s",
+            "recommended_nd_filter": project.recommended_nd_filter or "ND16",
+            "latitude": project.latitude or 37.5284,
+            "longitude": project.longitude or 126.9328,
+            "status": project.status or "READY",
+            "created_at": project.created_at,
+            "has_analysis": latest_analysis is not None,
+            "latest_analysis_id": latest_analysis.analysis_id if latest_analysis else None,
+            "analysis_score": latest_analysis.composition_score if latest_analysis else None
+        }
+
+    @staticmethod
+    def create_mobile_project(db: Session, project_in: ShootingProjectCreate) -> ShootingProject:
+        """
+        [Step 1] 모바일 현장에서 직접 신규 촬영 프로젝트(목적, 장소, 시간, 희망 구도)를 생성합니다.
+        """
+        new_project = ShootingProject(
+            title=project_in.title,
+            project_name=project_in.title,
+            place_name=project_in.place_name,
+            shooting_location=project_in.place_name,
+            target_date=project_in.target_date,
+            target_time=project_in.target_time,
+            scene_intent=project_in.scene_intent,
+            shooting_purpose=project_in.scene_intent,
+            recommended_mode=project_in.recommended_mode,
+            recommended_composition=project_in.recommended_mode,
+            recommended_shutter=project_in.recommended_shutter,
+            recommended_nd_filter=project_in.recommended_nd_filter,
+            latitude=project_in.latitude,
+            longitude=project_in.longitude,
+            status="READY"
+        )
+        db.add(new_project)
+        db.commit()
+        db.refresh(new_project)
+        return new_project
 
     @staticmethod
     def analyze_camera_frame(req: AnalyzeRequest) -> AnalyzeResponse:

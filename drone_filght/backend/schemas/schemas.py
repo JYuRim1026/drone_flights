@@ -133,6 +133,29 @@ class ShootingProjectResponse(ShootingProjectCreate):
         from_attributes = True
 
 
+class MobileProjectDetailResponse(BaseModel):
+    id: int
+    project_id: int
+    title: str
+    place_name: str
+    target_date: str
+    target_time: str
+    scene_intent: Optional[str] = None
+    recommended_mode: Optional[str] = None
+    recommended_shutter: Optional[str] = None
+    recommended_nd_filter: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    status: str
+    created_at: Optional[datetime] = None
+    has_analysis: bool = False
+    latest_analysis_id: Optional[int] = None
+    analysis_score: Optional[float] = None
+
+    class Config:
+        from_attributes = True
+
+
 # ==========================================
 # D. 촬영 분석 및 실시간 가이드 스키마 (모바일 전용)
 # ==========================================

@@ -130,48 +130,68 @@ class AirspaceZone(Base):
 class ShootingProject(Base):
     __tablename__ = "shooting_projects"
 
-    project_id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.user_id"), nullable=True)
-    flight_id = Column(Integer, ForeignKey("flight_requests.flight_id"), nullable=True)
+    flight_request_id = Column(Integer, ForeignKey("flight_requests.flight_id"), nullable=True)
 
-    project_name = Column(String(100), nullable=False)
-    shooting_purpose = Column(String(100), nullable=True)
-    shooting_location = Column(String(255), nullable=True)
-    planned_time = Column(DateTime, nullable=True, default=datetime.utcnow)
-    composition_type = Column(String(50), nullable=True)
-
-    analysis_result = Column(JSON, nullable=True)           # 최종 AI 분석 결과 상세
-    detected_scene = Column(String(100), nullable=True)     # 인식한 촬영 장면
-    recommended_composition = Column(String(100), nullable=True) # AI 추천 구도
-    achieved_rate = Column(Float, nullable=True)            # 최종 구도 이행률 (%) - DECIMAL(5,2)
-    shooting_duration = Column(Integer, nullable=True)      # 실제 촬영 시간(초)
-    result_file_url = Column(String(500), nullable=True)    # 촬영 결과물 저장 경로
-
-    created_at = Column(DateTime, default=datetime.utcnow)
-    analysis_completed_at = Column(DateTime, nullable=True) # 분석 완료 일시
-
-    # 호환성 컬럼 & synonym
-    id = synonym("project_id")
-    flight_request_id = synonym("flight_id")
-    title = synonym("project_name")
-    place_name = synonym("shooting_location")
-    scene_intent = synonym("shooting_purpose")
-    recommended_mode = synonym("recommended_composition")
-    status = Column(String(30), default="CREATED")          # CREATED, ANALYZING, COMPLETED, FAILED
-    project_code = Column(String(50), unique=True, index=True, nullable=True)
-    project_token = Column(String(512), nullable=True)
+    title = Column(String(150), nullable=False)
+    place_name = Column(String(150), nullable=False)
     latitude = Column(Float, default=37.5284)
     longitude = Column(Float, default=126.9328)
     target_date = Column(String(30), nullable=True, default="2026-10-24")
     target_time = Column(String(50), nullable=True, default="14:00 ~ 16:00")
+    scene_intent = Column(Text, nullable=True)
+    recommended_mode = Column(String(100), default="패럴랙스 리빌 & 선셋 아크")
     recommended_shutter = Column(String(50), default="1/50s")
     recommended_nd_filter = Column(String(50), default="ND16")
+    status = Column(String(30), default="READY")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    project_code = Column(String(50), unique=True, index=True, nullable=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    project_token = Column(String(512), nullable=True)
+
+    # 호환용 컬럼들 (모바일 및 통합 API)
+    project_id = Column(Integer, nullable=True)
+    flight_id = Column(Integer, nullable=True)
+    project_name = Column(String(100), nullable=True)
+    shooting_purpose = Column(String(100), nullable=True)
+    shooting_location = Column(String(255), nullable=True)
+    planned_time = Column(DateTime, nullable=True, default=datetime.utcnow)
+    composition_type = Column(String(50), nullable=True)
+    analysis_result = Column(JSON, nullable=True)
+    detected_scene = Column(String(100), nullable=True)
+    recommended_composition = Column(String(100), nullable=True)
+    achieved_rate = Column(Float, nullable=True)
+    shooting_duration = Column(Integer, nullable=True)
+    result_file_url = Column(String(500), nullable=True)
+    analysis_completed_at = Column(DateTime, nullable=True)
+
+    def __init__(self, **kwargs):
+        # 양방향 필드 동기화 (title <-> project_name, place_name <-> shooting_location 등)
+        t = kwargs.get("title") or kwargs.get("project_name")
+        kwargs["title"] = t or "촬영 프로젝트"
+        kwargs["project_name"] = t or "촬영 프로젝트"
+
+        p = kwargs.get("place_name") or kwargs.get("shooting_location")
+        kwargs["place_name"] = p or "서울 한강공원"
+        kwargs["shooting_location"] = p or "서울 한강공원"
+
+        s = kwargs.get("scene_intent") or kwargs.get("shooting_purpose")
+        if s:
+            kwargs["scene_intent"] = s
+            kwargs["shooting_purpose"] = s
+
+        m = kwargs.get("recommended_mode") or kwargs.get("recommended_composition")
+        if m:
+            kwargs["recommended_mode"] = m
+            kwargs["recommended_composition"] = m
+
+        super().__init__(**kwargs)
 
     # 관계 설정
     user = relationship("User", back_populates="shooting_projects")
     flight_request = relationship("FlightRequest", back_populates="projects")
-    analyses = relationship("ShootingAnalysis", back_populates="project", cascade="all, delete-orphan")
+    analyses = relationship("ShootingAnalysis", back_populates="project", cascade="all, delete-orphan", foreign_keys="[ShootingAnalysis.project_id]")
 
 
 # ==========================================
@@ -316,7 +336,7 @@ class ShootingAnalysis(Base):
     __tablename__ = "shooting_analyses"
 
     analysis_id = Column(Integer, primary_key=True, autoincrement=True, index=True)
-    project_id = Column(Integer, ForeignKey("shooting_projects.project_id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id = Column(Integer, ForeignKey("shooting_projects.id", ondelete="CASCADE"), nullable=False, index=True)
     analysis_status = Column(String(50), default="completed", nullable=False)
     target_summary = Column(Text, nullable=True)
     environment_summary = Column(Text, nullable=True)

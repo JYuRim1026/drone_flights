@@ -3,7 +3,9 @@ from sqlalchemy.orm import Session
 from typing import List
 from backend.database import get_db
 from backend.schemas.schemas import (
+    ShootingProjectCreate,
     ShootingProjectResponse,
+    MobileProjectDetailResponse,
     AnalyzeRequest,
     AnalyzeResponse,
     RecommendationResponse,
@@ -14,12 +16,35 @@ from backend.services.mobile_service import mobile_service
 
 router = APIRouter(prefix="/mobile", tags=["Mobile API (C, D Data)"])
 
-@router.get("/projects", response_model=List[ShootingProjectResponse], summary="촬영 프로젝트 목록 조회 [C 영역]")
+@router.get("/projects", response_model=List[ShootingProjectResponse], summary="1. [Step 1] 모바일 촬영 프로젝트 목록 조회 [C 영역]")
 def get_mobile_projects(db: Session = Depends(get_db)):
     """
     모바일 웹(날려드려) '내 촬영 신청' 화면에서 PC에서 수립된 비행/촬영 계획을 불러옵니다.
     """
     return mobile_service.get_mobile_projects(db)
+
+
+@router.get("/projects/{project_id}", response_model=MobileProjectDetailResponse, summary="1. [Step 1] 모바일 촬영 프로젝트 상세 정보 불러오기 [C 영역]")
+def get_mobile_project_detail(
+    project_id: int = Path(..., description="프로젝트 고유 ID"),
+    db: Session = Depends(get_db)
+):
+    """
+    [Step 1] PC에서 생성된 특정 촬영 프로젝트를 선택하여
+    촬영 목적, 장소, 촬영 시간, 원하는 구도 및 AI 분석 여부를 불러옵니다.
+    """
+    return mobile_service.get_mobile_project_detail(db, project_id)
+
+
+@router.post("/projects", response_model=ShootingProjectResponse, status_code=201, summary="1. [Step 1] 모바일 신규 촬영 프로젝트 등록 [C 영역]")
+def create_mobile_project(
+    project_in: ShootingProjectCreate,
+    db: Session = Depends(get_db)
+):
+    """
+    [Step 1] 모바일 현장에서 직접 신규 촬영 목적, 장소, 시간, 원하는 구도를 설정하여 등록합니다.
+    """
+    return mobile_service.create_mobile_project(db, project_in)
 
 
 @router.post("/analyze", response_model=AnalyzeResponse, summary="카메라 촬영 장면 실시간 분석 요청 [D 영역]")
