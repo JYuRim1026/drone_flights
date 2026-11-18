@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/pc", "destination": "/pc.html" },
+    { "source": "/mobile", "destination": "/mobile.html" },
+    { "source": "/camera", "destination": "/camera.html" },
+    { "source": "/(.*)", "destination": "/$1" }
+  ]
+}
