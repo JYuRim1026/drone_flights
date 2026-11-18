@@ -9,7 +9,7 @@ Community & Video Recommendation Router
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Header
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 
 from backend.services.video_recommender import VideoRecommender
 from backend.services.auth_service import auth_service
