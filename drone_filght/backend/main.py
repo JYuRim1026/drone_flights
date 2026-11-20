@@ -267,5 +267,31 @@ def root():
     }
 
 @app.get("/health", tags=["System Health"])
+@app.get("/api/health", tags=["System Health"])
 def health():
-    return {"status": "healthy"}
+    import sqlalchemy
+    db_status = "unknown"
+    user_count = 0
+    err_detail = None
+    try:
+        db = SessionLocal()
+        db.execute(sqlalchemy.text("SELECT 1"))
+        user_count = db.query(models.User).count()
+        db.close()
+        db_status = f"connected ({user_count} users present)"
+    except Exception as e:
+        db_status = "error"
+        err_detail = f"{type(e).__name__}: {str(e)}"
+
+    db_url = settings.DATABASE_URL
+    masked_db = db_url.split("@")[-1] if "@" in db_url else db_url
+
+    return {
+        "status": "healthy" if err_detail is None else "degraded",
+        "service": settings.PROJECT_NAME,
+        "is_serverless": settings.IS_SERVERLESS,
+        "database_status": db_status,
+        "database_target": masked_db,
+        "user_count": user_count,
+        "error": err_detail
+    }
