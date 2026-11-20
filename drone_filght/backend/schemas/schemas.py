@@ -404,6 +404,7 @@ class TokenResponse(BaseModel):
     username: str = Field(..., description="사용자 아이디")
     role: str = Field(..., description="사용자 역할 (pilot / crew / admin)")
     allowed_screens: List[str] = Field(..., description="접근 가능한 화면 목록 (['pc', 'mobile'])")
+    user: Optional[Dict[str, Any]] = Field(default=None, description="사용자 프로필 정보 딕셔너리")
 
 class UserSecureProfile(BaseModel):
     id: int

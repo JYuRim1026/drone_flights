@@ -15,9 +15,34 @@ class Settings:
     _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     _SOURCE_DB = os.path.join(_BASE_DIR, "sky_command.db")
     
-    # In Vercel serverless / Lambda environment, the app bundle is read-only.
-    # Copy database to system temp directory so SQLite can read and write without "readonly database" errors.
-    if os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
+    # In Vercel serverless / Lambda environment, the app bundle is strictly read-only.
+    # We dynamically test environment flags and directory writability.
+    # When read-only or in serverless, we automatically use the system temp directory.
+    @staticmethod
+    def _is_serverless_env(base_dir: str) -> bool:
+        # 1. Standard serverless environment flags
+        serverless_flags = [
+            "VERCEL", "VERCEL_ENV", "NOW_REGION",
+            "AWS_LAMBDA_FUNCTION_NAME", "LAMBDA_TASK_ROOT"
+        ]
+        if any(os.getenv(k) for k in serverless_flags):
+            return True
+        # 2. Typical serverless execution path on AWS / Vercel
+        if os.path.exists("/var/task"):
+            return True
+        # 3. Direct write permission test on current directory
+        try:
+            test_file = os.path.join(base_dir, ".fs_write_test_tmp")
+            with open(test_file, "w") as f:
+                f.write("1")
+            os.remove(test_file)
+            return False
+        except Exception:
+            return True
+
+    IS_SERVERLESS: bool = _is_serverless_env(_BASE_DIR)
+
+    if IS_SERVERLESS:
         import tempfile
         import shutil
         _TMP_DIR = tempfile.gettempdir()

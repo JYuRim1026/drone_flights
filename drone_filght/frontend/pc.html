@@ -6500,8 +6500,9 @@ async function submitAuthForm() {
         body: JSON.stringify({ username: email, password: password })
       });
       let data = {};
+      const respText = await resp.text();
       try {
-        data = await resp.json();
+        data = JSON.parse(respText);
       } catch (jsonErr) {
         if (!resp.ok) {
           throw new Error(`서버 응답 오류 (${resp.status}): 백엔드 서버 상태를 확인해주세요.`);
@@ -6535,8 +6536,9 @@ async function submitAuthForm() {
         })
       });
       let data = {};
+      const respText = await resp.text();
       try {
-        data = await resp.json();
+        data = JSON.parse(respText);
       } catch (jsonErr) {
         if (!resp.ok) {
           throw new Error(`서버 응답 오류 (${resp.status}): 백엔드 서버 상태를 확인해주세요.`);

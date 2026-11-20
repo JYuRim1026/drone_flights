@@ -1092,8 +1092,9 @@ async function submitAuthForm() {
         body: JSON.stringify({ email, password, username: email })
       });
       let data = {};
+      const respText = await resp.text();
       try {
-        data = await resp.json();
+        data = JSON.parse(respText);
       } catch (jsonErr) {
         if (!resp.ok) {
           throw new Error(`서버 응답 오류 (${resp.status}): 백엔드 서버 상태를 확인해주세요.`);
@@ -1102,11 +1103,12 @@ async function submitAuthForm() {
       if (!resp.ok) {
         throw new Error(data.detail || '로그인에 실패했습니다. 아이디와 비밀번호를 확인해주세요.');
       }
+      const userInfo = data.user || { id: data.user_id, username: data.username, email: email, role: data.role };
       localStorage.setItem('sky_auth_token', data.access_token);
-      localStorage.setItem('sky_auth_user', JSON.stringify(data.user));
+      localStorage.setItem('sky_auth_user', JSON.stringify(userInfo));
       updateAuthUI();
       closeAuthModal();
-      toast(`환영합니다, ${data.user.username || data.user.email}님!`);
+      toast(`환영합니다, ${userInfo.username || userInfo.email}님!`);
     } else {
       const resp = await fetch(`${baseUrl}/api/v1/auth/register`, {
         method: 'POST',
@@ -1121,8 +1123,9 @@ async function submitAuthForm() {
         })
       });
       let data = {};
+      const respText = await resp.text();
       try {
-        data = await resp.json();
+        data = JSON.parse(respText);
       } catch (jsonErr) {
         if (!resp.ok) {
           throw new Error(`서버 응답 오류 (${resp.status}): 백엔드 서버 상태를 확인해주세요.`);

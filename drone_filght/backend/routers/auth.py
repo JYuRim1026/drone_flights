@@ -118,7 +118,14 @@ def login(login_in: UserLogin, db: Session = Depends(get_db)):
         user_id=user.id,
         username=user.username,
         role=user.role,
-        allowed_screens=allowed_screens
+        allowed_screens=allowed_screens,
+        user={
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "role": user.role,
+            "full_name": user.full_name
+        }
     )
 
 

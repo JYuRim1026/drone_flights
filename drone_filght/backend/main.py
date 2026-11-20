@@ -18,7 +18,8 @@ if "backend" not in sys.modules:
         _pkg.__path__ = [str(_CUR_DIR)]
         sys.modules["backend"] = _pkg
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
@@ -206,6 +207,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Global Exception Handler (JSON fail-safe so frontend never sees raw HTML or broken JSON)
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    import traceback
+    err_type = type(exc).__name__
+    err_msg = str(exc)
+    print(f"[FASTAPI GLOBAL ERROR 500] {request.method} {request.url.path}: {err_type} - {err_msg}")
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": f"백엔드 서버 내부 오류 ({err_type}): {err_msg}",
+            "type": err_type,
+            "path": request.url.path
+        }
+    )
 
 # Include Routers with multiple prefixes for maximum frontend & proxy compatibility
 _api_routers = [
