@@ -35,6 +35,7 @@ drone_filght/backend/.env
 # Database
 *.db
 *.sqlite3
+!drone_filght/backend/sky_command_demo.db
 
 # IDE / Editor
 .vscode/

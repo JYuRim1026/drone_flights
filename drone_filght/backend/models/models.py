@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, BigInteger, String, Float, Boolean, DateTime, Text, ForeignKey, JSON, UniqueConstraint
+from sqlalchemy import Column, Integer, BigInteger, String, Float, Boolean, DateTime, Text, ForeignKey, JSON, UniqueConstraint, event
 from sqlalchemy.orm import relationship, synonym
 from datetime import datetime
 from backend.database import Base
@@ -9,10 +9,13 @@ from backend.database import Base
 class User(Base):
     __tablename__ = "users"
 
-    user_id = Column(Integer, primary_key=True, index=True)
-    user_name = Column(String(50), nullable=False)
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, unique=True, index=True, nullable=True)
+    username = Column(String(50), nullable=True)
+    user_name = Column(String(50), nullable=True)
     email = Column(String(100), unique=True, index=True, nullable=False)
-    password_hash = Column(String(255), nullable=False)
+    hashed_password = Column(String(255), nullable=True)
+    password_hash = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # 추가 편의/호환 컬럼
@@ -23,22 +26,32 @@ class User(Base):
     role = Column(String(30), default="pilot")          # pilot, crew, admin
     is_active = Column(Boolean, default=True)
 
-    # 기존 코드 호환용 synonym
-    id = synonym("user_id")
-    username = synonym("user_name")
-    hashed_password = synonym("password_hash")
+    def __init__(self, **kwargs):
+        u = kwargs.get("username") or kwargs.get("user_name")
+        if u:
+            kwargs["username"] = u
+            kwargs["user_name"] = u
+        p = kwargs.get("hashed_password") or kwargs.get("password_hash")
+        if p:
+            kwargs["hashed_password"] = p
+            kwargs["password_hash"] = p
+        uid = kwargs.get("id") or kwargs.get("user_id")
+        if uid is not None:
+            kwargs["id"] = uid
+            kwargs["user_id"] = uid
+        super().__init__(**kwargs)
 
     # 관계 설정 (1:1 user_settings, 1:N flight_requests, 1:N shooting_projects, 1:N flight_guide_logs, 1:N registered_drones)
-    settings = relationship("UserSetting", back_populates="user", uselist=False, cascade="all, delete-orphan")
-    flight_requests = relationship("FlightRequest", back_populates="user", cascade="all, delete-orphan")
-    shooting_projects = relationship("ShootingProject", back_populates="user", cascade="all, delete-orphan")
-    flight_guide_logs = relationship("FlightGuideLog", back_populates="user", cascade="all, delete-orphan")
-    registered_drones = relationship("RegisteredDrone", back_populates="user", cascade="all, delete-orphan")
+    settings = relationship("UserSetting", back_populates="user", uselist=False, cascade="all, delete-orphan", foreign_keys="[UserSetting.user_id]")
+    flight_requests = relationship("FlightRequest", back_populates="user", cascade="all, delete-orphan", foreign_keys="[FlightRequest.user_id]")
+    shooting_projects = relationship("ShootingProject", back_populates="user", cascade="all, delete-orphan", foreign_keys="[ShootingProject.user_id]")
+    flight_guide_logs = relationship("FlightGuideLog", back_populates="user", cascade="all, delete-orphan", foreign_keys="[FlightGuideLog.user_id]")
+    registered_drones = relationship("RegisteredDrone", back_populates="user", cascade="all, delete-orphan", foreign_keys="[RegisteredDrone.user_id]")
 
     # 커뮤니티 선호도 및 상호작용 관계 (1:N survey_preferences, 1:N preference_scores, 1:N interactions)
-    survey_preferences = relationship("SurveyPreference", back_populates="user", cascade="all, delete-orphan")
-    preference_scores = relationship("UserPreferenceScore", back_populates="user", cascade="all, delete-orphan")
-    interactions = relationship("Interaction", back_populates="user", cascade="all, delete-orphan")
+    survey_preferences = relationship("SurveyPreference", back_populates="user", cascade="all, delete-orphan", foreign_keys="[SurveyPreference.user_id]")
+    preference_scores = relationship("UserPreferenceScore", back_populates="user", cascade="all, delete-orphan", foreign_keys="[UserPreferenceScore.user_id]")
+    interactions = relationship("Interaction", back_populates="user", cascade="all, delete-orphan", foreign_keys="[Interaction.user_id]")
 
 
 # ==========================================
@@ -47,18 +60,25 @@ class User(Base):
 class UserSetting(Base):
     __tablename__ = "user_settings"
 
-    user_id = Column(Integer, ForeignKey("users.user_id"), primary_key=True)
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     preferred_mode = Column(String(30), default="cinematic")
+    preferred_camera_mode = Column(String(50), default="cinematic")
     notification = Column(Boolean, default=True)
+    notification_enabled = Column(Boolean, default=True)
     settings_updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    # 호환성 컬럼 & synonym
-    id = synonym("user_id")
-    notification_enabled = synonym("notification")
-    preferred_camera_mode = synonym("preferred_mode")
-    updated_at = synonym("settings_updated_at")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     safety_margin_m = Column(Integer, default=30)
     weather_auto_refresh = Column(Boolean, default=True)
+
+    def __init__(self, **kwargs):
+        m = kwargs.get("preferred_mode") or kwargs.get("preferred_camera_mode") or "cinematic"
+        kwargs["preferred_mode"] = m
+        kwargs["preferred_camera_mode"] = m
+        n = kwargs.get("notification") if kwargs.get("notification") is not None else kwargs.get("notification_enabled", True)
+        kwargs["notification"] = n
+        kwargs["notification_enabled"] = n
+        super().__init__(**kwargs)
 
     # 관계 설정
     user = relationship("User", back_populates="settings")
@@ -70,17 +90,16 @@ class UserSetting(Base):
 class FlightRequest(Base):
     __tablename__ = "flight_requests"
 
-    flight_id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    id = Column(Integer, primary_key=True, index=True)
+    flight_id = Column(Integer, unique=True, index=True, nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     flight_date = Column(DateTime, default=datetime.utcnow)
-    flight_location = Column(String(255), nullable=False)
-    flight_status = Column(String(30), default="PENDING")   # READY, PENDING, APPROVED, REJECTED
+    flight_location = Column(String(255), nullable=True)
+    location = Column(String(200), nullable=True)
+    flight_status = Column(String(30), default="APPROVED")   # READY, PENDING, APPROVED, REJECTED
+    approval_status = Column(String(20), default="APPROVED")
     flight_plan = Column(JSON, nullable=True)               # 비행 계획 상세 (웨이포인트, 시간, 고도 등)
 
-    # 호환성 컬럼 & synonym
-    id = synonym("flight_id")
-    location = synonym("flight_location")
-    approval_status = synonym("flight_status")
     latitude = Column(Float, nullable=True, default=37.5284)
     longitude = Column(Float, nullable=True, default=126.9328)
     start_date = Column(String(30), nullable=True, default="2026-10-24")
@@ -93,10 +112,69 @@ class FlightRequest(Base):
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    def __init__(self, **kwargs):
+        loc = kwargs.get("location") or kwargs.get("flight_location") or "비행 예정 장소"
+        kwargs["location"] = loc
+        kwargs["flight_location"] = loc
+        st = kwargs.get("approval_status") or kwargs.get("flight_status") or "APPROVED"
+        kwargs["approval_status"] = st
+        kwargs["flight_status"] = st
+        fid = kwargs.get("id") or kwargs.get("flight_id")
+        if fid is not None:
+            kwargs["id"] = fid
+            kwargs["flight_id"] = fid
+        super().__init__(**kwargs)
+
     # 관계 설정
     user = relationship("User", back_populates="flight_requests")
     projects = relationship("ShootingProject", back_populates="flight_request")
     guide_logs = relationship("FlightGuideLog", back_populates="flight_request")
+
+
+# ==========================================
+# SQLAlchemy Synchronization Listeners
+# ==========================================
+@event.listens_for(User, "before_insert")
+def _sync_user_before_insert(mapper, connection, target):
+    u = target.username or target.user_name
+    if u:
+        target.username = u
+        target.user_name = u
+    p = target.hashed_password or target.password_hash
+    if p:
+        target.hashed_password = p
+        target.password_hash = p
+    if target.id is not None and target.user_id is None:
+        target.user_id = target.id
+    elif target.user_id is not None and target.id is None:
+        target.id = target.user_id
+
+@event.listens_for(User, "after_insert")
+def _sync_user_after_insert(mapper, connection, target):
+    if target.user_id is None or target.user_id != target.id:
+        connection.execute(
+            User.__table__.update().where(User.id == target.id).values(user_id=target.id)
+        )
+
+@event.listens_for(FlightRequest, "before_insert")
+def _sync_flight_before_insert(mapper, connection, target):
+    loc = target.location or target.flight_location or "비행 예정 장소"
+    target.location = loc
+    target.flight_location = loc
+    st = target.approval_status or target.flight_status or "APPROVED"
+    target.approval_status = st
+    target.flight_status = st
+    if target.id is not None and target.flight_id is None:
+        target.flight_id = target.id
+    elif target.flight_id is not None and target.id is None:
+        target.id = target.flight_id
+
+@event.listens_for(FlightRequest, "after_insert")
+def _sync_flight_after_insert(mapper, connection, target):
+    if target.flight_id is None or target.flight_id != target.id:
+        connection.execute(
+            FlightRequest.__table__.update().where(FlightRequest.id == target.id).values(flight_id=target.id)
+        )
 
 
 # ==========================================
@@ -192,6 +270,14 @@ class ShootingProject(Base):
     user = relationship("User", back_populates="shooting_projects")
     flight_request = relationship("FlightRequest", back_populates="projects")
     analyses = relationship("ShootingAnalysis", back_populates="project", cascade="all, delete-orphan", foreign_keys="[ShootingAnalysis.project_id]")
+
+
+@event.listens_for(ShootingProject, "after_insert")
+def _sync_project_after_insert(mapper, connection, target):
+    if target.project_id is None or target.project_id != target.id:
+        connection.execute(
+            ShootingProject.__table__.update().where(ShootingProject.id == target.id).values(project_id=target.id)
+        )
 
 
 # ==========================================
