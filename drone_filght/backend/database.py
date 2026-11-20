@@ -6,7 +6,15 @@ from backend.config import settings
 connect_args = {}
 engine_kwargs = {"echo": False}
 
+if not settings.DATABASE_URL:
+    raise RuntimeError("DATABASE_URL이 설정되지 않았습니다.")
+
 if settings.DATABASE_URL.startswith("sqlite"):
+    connect_args = {
+        "check_same_thread": False,
+        "timeout": 30
+    }
+    engine_kwargs["poolclass"] = NullPool
     connect_args = {"check_same_thread": False, "timeout": 30}
     engine_kwargs["poolclass"] = NullPool
 

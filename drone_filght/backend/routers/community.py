@@ -34,7 +34,6 @@ class _LazyRecommenderProxy:
 
 recommender = _LazyRecommenderProxy()
 
-
 # -------------------------------------------------------------
 # Pydantic Schemas
 # -------------------------------------------------------------
@@ -60,21 +59,48 @@ class VideoCreateRequest(BaseModel):
     composition: str = Field(..., description="촬영 구도 (예: '와이드 트래킹', '오빗(원형회전)', '버드아이 상승', '하이앵글 팬')")
 
 
-def resolve_user_id(explicit_uid: Optional[int], auth_header: Optional[str], db: Session) -> int:
-    """토큰 또는 파라미터에서 user_id를 확인, 없으면 기본 테스트 계정(user_id=20 또는 첫 유저) 반환"""
-    if explicit_uid:
-        return explicit_uid
-    if auth_header and auth_header.startswith("Bearer "):
-        token = auth_header.replace("Bearer ", "").strip()
-        user = auth_service.get_current_user_from_token(db, token)
-        if user and user.user_id:
-            return user.user_id
-    # 기본 계정 확인 (user_id=20 우선, 없으면 첫 번째 유저)
-    u = db.query(models.User).filter(models.User.user_id == 20).first()
-    if u:
-        return u.user_id
-    first_u = db.query(models.User).first()
-    return first_u.user_id if first_u else 1
+def resolve_user_id(
+    explicit_uid: Optional[int],
+    auth_header: Optional[str],
+    db: Session
+) -> int:
+
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(
+            status_code=401,
+            detail="로그인이 필요합니다."
+        )
+
+    token = auth_header.replace("Bearer ", "", 1).strip()
+
+    user = auth_service.get_current_user_from_token(db, token)
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="유효하지 않은 사용자 인증 정보입니다."
+        )
+
+    if explicit_uid is not None and explicit_uid != user.user_id:
+        if user.role != "admin":
+            raise HTTPException(
+                status_code=403,
+                detail="다른 사용자의 데이터에 접근할 수 없습니다."
+            )
+
+        target_user = db.query(models.User).filter(
+            models.User.user_id == explicit_uid
+        ).first()
+
+        if not target_user:
+            raise HTTPException(
+                status_code=404,
+                detail="대상 사용자를 찾을 수 없습니다."
+            )
+
+        return target_user.user_id
+
+    return user.user_id
 
 
 # -------------------------------------------------------------

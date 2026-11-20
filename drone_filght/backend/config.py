@@ -3,7 +3,7 @@ from typing import List
 from dotenv import load_dotenv
 
 _ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
-load_dotenv(_ENV_PATH, override=True)
+load_dotenv(_ENV_PATH, override=False)
 load_dotenv()
 
 class Settings:

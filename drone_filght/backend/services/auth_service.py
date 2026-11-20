@@ -100,6 +100,27 @@ class AuthService:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="인증 토큰 서명이 위조되었거나 손상되었습니다."
             )
+    def get_current_user_from_token(
+        self,
+        db: Session,
+        token: str
+    ) -> Optional[User]:
+
+        payload = self.decode_access_token(token)
+        username = payload.get("sub")
+
+        if not username:
+            return None
+
+        user = db.query(User).filter(
+            (User.username == username) |
+            (User.email == username)
+        ).first()
+
+        if not user or not user.is_active:
+            return None
+
+        return user
 
     # ==========================================
     # 3. 프로젝트별 서명된 접근 보안 토큰 (Project Access Token)
