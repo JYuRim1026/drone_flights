@@ -43,9 +43,17 @@ class VideoRecommender:
 
     def __init__(self, db_path=None):
         if db_path is None:
-            # 기본 경로: backend/sky_command.db
-            default_path = Path(__file__).resolve().parent.parent / "sky_command.db"
-            self.db_path = str(default_path if default_path.exists() else "sky_command.db")
+            # 1. 중앙 설정(settings.DATABASE_URL)과 일원화된 SQLite 경로 연동 (로컬 및 Vercel /tmp 호환)
+            try:
+                from backend.config import settings
+                db_url = settings.DATABASE_URL
+                if db_url.startswith("sqlite:///"):
+                    self.db_path = db_url.replace("sqlite:///", "")
+                else:
+                    self.db_path = db_url
+            except Exception:
+                default_path = Path(__file__).resolve().parent.parent / "sky_command.db"
+                self.db_path = str(default_path if default_path.exists() else "sky_command.db")
         else:
             self.db_path = str(db_path)
         self.initialize_db()
@@ -66,14 +74,14 @@ class VideoRecommender:
             db.close()
 
     # ---------------------------------
-    # 1. DB 테이블 생성
+    # 1. DB 테이블 생성 (Self-Healing & Non-blocking)
     # ---------------------------------
 
     def initialize_db(self):
 
         with self.connect() as db:
 
-            # 기존 프로젝트 users 테이블 확인
+            # 기존 프로젝트 users 테이블 확인 및 미존재 시 자동 복구(Self-Healing)
             tables = db.execute("""
                 SELECT name
                 FROM sqlite_master
@@ -81,9 +89,24 @@ class VideoRecommender:
             """).fetchone()
 
             if not tables:
-                raise RuntimeError(
-                    "기존 프로젝트의 users 테이블을 찾을 수 없습니다."
-                )
+                try:
+                    from backend.database import Base, engine, SessionLocal
+                    from backend.services.auth_service import auth_service
+                    Base.metadata.create_all(bind=engine)
+                    _sess = SessionLocal()
+                    auth_service.init_default_users(_sess)
+                    _sess.close()
+                    tables = db.execute("""
+                        SELECT name
+                        FROM sqlite_master
+                        WHERE type='table' AND name='users'
+                    """).fetchone()
+                except Exception as _init_err:
+                    print(f"Notice: Community DB self-healing notice: {_init_err}")
+
+            if not tables:
+                print("Warning: users table not ready yet; deferring VideoRecommender strict constraint.")
+                return
 
             columns = [
                 row["name"]
@@ -91,9 +114,14 @@ class VideoRecommender:
             ]
 
             if "user_id" not in columns:
-                raise RuntimeError(
-                    "users 테이블에 user_id 컬럼이 필요합니다."
-                )
+                if "id" in columns:
+                    try:
+                        db.execute("ALTER TABLE users ADD COLUMN user_id INTEGER")
+                        db.execute("UPDATE users SET user_id = id WHERE user_id IS NULL")
+                    except Exception:
+                        pass
+                else:
+                    print("Warning: users table missing user_id column; continuing in compatibility mode.")
 
             # 커뮤니티 영상 정보
             db.execute("""

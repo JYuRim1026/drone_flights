@@ -19,7 +19,20 @@ from backend.models import models
 
 router = APIRouter(prefix="/community", tags=["Community & Video Recommendations"])
 
-recommender = VideoRecommender()
+# 지연 초기화(Lazy Loading) 프록시: 서버 부팅 시점이 아닌 실제 커뮤니티 API 호출 시점에 안전하게 초기화
+_recommender_instance: Optional[VideoRecommender] = None
+
+def get_recommender() -> VideoRecommender:
+    global _recommender_instance
+    if _recommender_instance is None:
+        _recommender_instance = VideoRecommender()
+    return _recommender_instance
+
+class _LazyRecommenderProxy:
+    def __getattr__(self, name):
+        return getattr(get_recommender(), name)
+
+recommender = _LazyRecommenderProxy()
 
 
 # -------------------------------------------------------------
