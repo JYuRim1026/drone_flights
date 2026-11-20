@@ -1,8 +1,13 @@
 import io
 import base64
-import qrcode
-from qrcode.image.styledpil import StyledPilImage
-from qrcode.image.styles.moduledrawers import RoundedModuleDrawer
+try:
+    import qrcode
+    from qrcode.image.styledpil import StyledPilImage
+    from qrcode.image.styles.moduledrawers import RoundedModuleDrawer
+except ImportError:
+    qrcode = None
+    StyledPilImage = None
+    RoundedModuleDrawer = None
 from typing import Dict, Any, List, Optional, Union
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
@@ -56,6 +61,8 @@ class SyncService:
         모바일 접속용 URL을 담은 스캔 가능한 고해상도 QR코드(PNG Base64) 생성
         """
         try:
+            if qrcode is None:
+                return ""
             qr = qrcode.QRCode(
                 version=1,
                 error_correction=qrcode.constants.ERROR_CORRECT_M,
