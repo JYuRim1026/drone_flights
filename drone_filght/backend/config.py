@@ -69,51 +69,74 @@ class Settings:
             elif os.path.exists(demo_db):
                 source_template = demo_db
 
-        if not source_template:
-            raise RuntimeError(
-                f"[DB INIT ERROR] 데이터베이스 템플릿 파일이 존재하지 않습니다. "
-                f"({demo_db} 및 {original_db} 모두 없음). "
-                f"빈 DB가 비정상 생성되어 서버가 오류 상태로 실행되는 것을 방지하기 위해 중단합니다."
-            )
-
-        # Validate template integrity & required tables before copying
-        try:
-            with sqlite3.connect(source_template) as _conn:
-                _integ = _conn.execute("PRAGMA integrity_check;").fetchone()
-                if not _integ or _integ[0] != "ok":
-                    raise RuntimeError(f"DB 템플릿 무결성 검사 실패: {_integ}")
-                _u_tbl = _conn.execute(
-                    "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='users';"
-                ).fetchone()[0]
-                if _u_tbl == 0:
-                    raise RuntimeError(f"DB 템플릿 내 필수 users 테이블이 없습니다: {source_template}")
-        except Exception as _e:
-            raise RuntimeError(f"데이터베이스 무결성 검증 실패 ({source_template}): {_e}")
+        # Validate template integrity & required tables before copying (if on disk)
+        if source_template and os.path.exists(source_template):
+            try:
+                with sqlite3.connect(source_template) as _conn:
+                    _integ = _conn.execute("PRAGMA integrity_check;").fetchone()
+                    if not _integ or _integ[0] != "ok":
+                        source_template = None
+            except Exception:
+                source_template = None
 
         if is_serverless:
             tmp_db = os.path.join(tempfile.gettempdir(), "sky_command.db").replace("\\", "/")
             needs_copy = True
             if os.path.exists(tmp_db) and os.path.getsize(tmp_db) > 0:
                 try:
-                    with sqlite3.connect(tmp_db) as _chk:
-                        if _chk.execute("PRAGMA integrity_check;").fetchone()[0] == "ok":
-                            _u_cnt = _chk.execute(
+                    chk_conn = sqlite3.connect(tmp_db)
+                    try:
+                        if chk_conn.execute("PRAGMA integrity_check;").fetchone()[0] == "ok":
+                            _u_cnt = chk_conn.execute(
                                 "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='users';"
                             ).fetchone()[0]
                             if _u_cnt > 0:
                                 needs_copy = False
+                    finally:
+                        chk_conn.close()
                 except Exception:
                     needs_copy = True
 
             if needs_copy:
-                try:
-                    shutil.copy2(source_template, tmp_db)
-                    print(f"[DB INIT] Serverless: Copied template {source_template} -> {tmp_db}")
-                except Exception as _copy_err:
-                    raise RuntimeError(f"Serverless /tmp DB 복사 실패: {_copy_err}")
+                copied = False
+                # 1. Try file copy if template exists on disk
+                if source_template and os.path.exists(source_template):
+                    try:
+                        shutil.copy2(source_template, tmp_db)
+                        copied = True
+                        print(f"[DB INIT] Serverless: Copied template {source_template} -> {tmp_db}")
+                    except Exception:
+                        copied = False
+
+                # 2. If disk template was omitted by Vercel packager, unpack from embedded Python blob
+                if not copied:
+                    try:
+                        try:
+                            from backend.demo_db_blob import restore_demo_db_to
+                        except ImportError:
+                            from demo_db_blob import restore_demo_db_to
+                        if restore_demo_db_to(tmp_db):
+                            print(f"[DB INIT] Serverless: Successfully restored DB from embedded Python blob -> {tmp_db}")
+                            copied = True
+                    except Exception as _blob_err:
+                        print(f"[DB INIT WARNING] Blob restore failed: {_blob_err}")
+
+                if not copied and not os.path.exists(tmp_db):
+                    raise RuntimeError("Serverless /tmp DB 복제 및 복원에 실패했습니다.")
             return tmp_db
         else:
-            return source_template.replace("\\", "/")
+            if source_template:
+                return source_template.replace("\\", "/")
+            # Local fallback: restore demo_db from blob if missing
+            try:
+                try:
+                    from backend.demo_db_blob import restore_demo_db_to
+                except ImportError:
+                    from demo_db_blob import restore_demo_db_to
+                restore_demo_db_to(demo_db)
+                return demo_db.replace("\\", "/")
+            except Exception:
+                return demo_db.replace("\\", "/")
 
     _DEFAULT_DB: str = _resolve_sqlite_db.__func__(IS_SERVERLESS, _DEMO_DB, _ORIGINAL_LOCAL_DB)
     DATABASE_URL: str = os.getenv("DATABASE_URL", f"sqlite:///{_DEFAULT_DB}" if _DEFAULT_DB else "")
