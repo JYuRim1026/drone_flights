@@ -39,7 +39,7 @@ recommender = _LazyRecommenderProxy()
 # -------------------------------------------------------------
 class InteractionRequest(BaseModel):
     video_id: int = Field(..., description="영상 고유 ID")
-    action: str = Field(..., description="행동 구분: 'view', 'like', 'unlike', 'save', 'unsave'")
+    action: str = Field(..., description="행동 구분: 'view', 'repeat_view', 'like', 'unlike', 'save', 'unsave', 'select', 'satisfaction'")
     user_id: Optional[int] = Field(None, description="조종사 user_id (생략 시 인증 토큰 또는 기본 테스트 계정 사용)")
 
 class SurveyPreferenceItem(BaseModel):
@@ -104,11 +104,12 @@ def resolve_user_id(
 
 
 # -------------------------------------------------------------
-# 1. 커뮤니티 영상 목록 추천 조회 (추천순, 인기순, 최신순)
+# 1. 커뮤니티 영상 목록 추천 조회 (추천순, 인기순, 최신순, 기법별 필터링)
 # -------------------------------------------------------------
 @router.get("/videos", summary="커뮤니티 맞춤형 영상 목록 조회")
 def get_community_videos(
     sort: str = Query("recommended", description="정렬 방식: 'recommended'(개인화추천), 'popular'(인기순), 'latest'(최신순)"),
+    technique: Optional[str] = Query(None, description="촬영 기법 필터링 (예: orbit_poi, active_track_thirds 등)"),
     limit: int = Query(20, ge=1, le=100, description="조회 개수"),
     user_id: Optional[int] = Query(None, description="조종사 ID"),
     authorization: Optional[str] = Header(None),
@@ -116,11 +117,14 @@ def get_community_videos(
 ):
     try:
         uid = resolve_user_id(user_id, authorization, db)
-        videos = recommender.recommend(user_id=uid, sort=sort, limit=limit)
+        clean_limit = limit if isinstance(limit, int) else 20
+        tech_filter = technique if isinstance(technique, str) else None
+        videos = recommender.recommend(user_id=uid, sort=sort, limit=clean_limit, technique=tech_filter)
         return {
             "status": "success",
             "user_id": uid,
             "sort": sort,
+            "technique_filter": tech_filter,
             "count": len(videos),
             "videos": videos
         }
@@ -129,7 +133,7 @@ def get_community_videos(
 
 
 # -------------------------------------------------------------
-# 2. 영상 상호작용 기록 (조회, 좋아요, 좋아요 취소, 저장, 저장 취소)
+# 2. 영상 상호작용 기록 (조회, 좋아요, 좋아요 취소, 저장, 저장 취소, 선택, 만족도)
 # -------------------------------------------------------------
 @router.post("/interactions", summary="영상 이용 기록 저장 (조회/좋아요/저장 및 취소)")
 def record_interaction(
@@ -144,11 +148,14 @@ def record_interaction(
         stats = recommender.record_interaction(user_id=uid, video_id=payload.video_id, action=action)
 
         msg_map = {
-            "view": "영상 조회가 기록되었습니다. (조회수 +1)",
-            "like": "좋아요를 반영했습니다. 취향 선호도가 갱신됩니다.",
+            "view": "영상 조회가 기록되었습니다. (조회수 +1, 가중치 1.0)",
+            "repeat_view": "영상 반복 시청이 기록되었습니다. (가중치 2.5)",
+            "like": "좋아요를 반영했습니다. 취향 선호도가 대폭 갱신됩니다. (가중치 4.0)",
             "unlike": "좋아요를 취소했습니다.",
-            "save": "영상을 보관함에 저장했습니다.",
-            "unsave": "영상 저장을 취소했습니다."
+            "save": "영상을 보관함에 저장했습니다. (가중치 5.0)",
+            "unsave": "영상 저장을 취소했습니다.",
+            "select": "촬영 기법으로 선택되었습니다. (가중치 6.0)",
+            "satisfaction": "촬영 만족도 피드백이 반영되었습니다. (가중치 8.0)"
         }
 
         return {

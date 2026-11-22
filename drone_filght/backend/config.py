@@ -64,10 +64,10 @@ class Settings:
             elif os.path.exists(original_db):
                 source_template = original_db
         else:
-            if os.path.exists(original_db):
-                source_template = original_db
-            elif os.path.exists(demo_db):
+            if os.path.exists(demo_db):
                 source_template = demo_db
+            elif os.path.exists(original_db):
+                source_template = original_db
 
         # Validate template integrity & required tables before copying (if on disk)
         if source_template and os.path.exists(source_template):

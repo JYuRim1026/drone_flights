@@ -122,6 +122,8 @@ class ShootingProjectCreate(BaseModel):
     recommended_mode: Optional[str] = "패럴랙스 리빌 & 선셋 아크"
     recommended_shutter: Optional[str] = "1/50s"
     recommended_nd_filter: Optional[str] = "ND16"
+    desired_techniques: Optional[List[str]] = Field(default_factory=list, description="사용자 희망 촬영 기법 목록")
+    recommended_techniques: Optional[List[str]] = Field(default_factory=list, description="AI 추천 촬영 기법 목록")
 
 class ShootingProjectResponse(ShootingProjectCreate):
     id: int
@@ -129,6 +131,7 @@ class ShootingProjectResponse(ShootingProjectCreate):
     flight_request_id: Optional[int] = None
     status: str
     created_at: datetime
+    project_code: Optional[str] = None
     class Config:
         from_attributes = True
 
@@ -144,10 +147,13 @@ class MobileProjectDetailResponse(BaseModel):
     recommended_mode: Optional[str] = None
     recommended_shutter: Optional[str] = None
     recommended_nd_filter: Optional[str] = None
+    desired_techniques: Optional[List[str]] = None
+    recommended_techniques: Optional[List[str]] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     status: str
     created_at: Optional[datetime] = None
+    project_code: Optional[str] = None
     has_analysis: bool = False
     latest_analysis_id: Optional[int] = None
     analysis_score: Optional[float] = None
@@ -160,21 +166,41 @@ class MobileProjectDetailResponse(BaseModel):
 # D. 촬영 분석 및 실시간 가이드 스키마 (모바일 전용)
 # ==========================================
 class AnalyzeRequest(BaseModel):
-    project_id: int
+    project_id: int = 1
+    image_base64: Optional[str] = Field(None, description="모바일 카메라 캡처 이미지 (Base64 인코딩)")
     current_pitch: Optional[float] = -15.0
+    current_roll: Optional[float] = 0.0
     current_yaw: Optional[float] = 0.0
+    current_heading: Optional[float] = None
+    purpose: Optional[str] = Field("orbit", description="촬영 목적 (orbit, dronie, thirds, landscape)")
+    scene_intent: Optional[str] = Field(None, description="희망 촬영 콘셉트/의도")
+    shooting_number: Optional[int] = Field(None, description="현재 촬영 회차")
     sensor_width: Optional[int] = 1280
     sensor_height: Optional[int] = 720
     detected_horizon_y: Optional[float] = 0.5
+    save_result: Optional[bool] = Field(True, description="분석 결과 DB(shooting_analyses) 자동 저장 여부")
 
 class AnalyzeResponse(BaseModel):
     project_id: int
     frame_score: int
     is_ready: bool
-    guide_direction: str  # up, down, left, right, none
+    guide_direction: str  # up, down, left, right, none, level_left, level_right, step_back
     offset_x: float
     offset_y: float
     guide_message: str
+
+    # Extended Phase 4 Fields
+    subject: Optional[str] = None
+    subject_details: Optional[Dict[str, Any]] = None
+    environment_details: Optional[Dict[str, Any]] = None
+    recommended_composition: Optional[str] = None
+    recommendation_reason: Optional[str] = None
+    target_position: Optional[Dict[str, float]] = None
+    is_aligned: Optional[bool] = None
+    analysis_id: Optional[int] = None
+    shooting_number: Optional[int] = None
+    user_id: Optional[int] = None
+    source: Optional[str] = None
 
 class RecommendationResponse(BaseModel):
     project_id: int
@@ -192,10 +218,18 @@ class AnalysisResultCreate(BaseModel):
     offset_y: float
     guide_message: Optional[str] = None
     recorded_video_url: Optional[str] = None
+    shooting_number: Optional[int] = None
+    subject: Optional[str] = None
+    recommended_composition: Optional[str] = None
+    target_summary: Optional[str] = None
+    environment_summary: Optional[str] = None
 
 class AnalysisResultResponse(AnalysisResultCreate):
     id: int
+    analysis_id: Optional[int] = None
     created_at: datetime
+    user_id: Optional[int] = None
+    target_coordinates: Optional[Dict[str, Any]] = None
     class Config:
         from_attributes = True
 
@@ -500,6 +534,232 @@ class RegisteredDroneResponse(RegisteredDroneBase):
 
     class Config:
         from_attributes = True
+
+
+# ==========================================
+# 스마트폰 센서 & 촬영 동선 (ShootingPath) 스키마
+# ==========================================
+class RawSensorData(BaseModel):
+    alpha: Optional[float] = Field(None, description="기기 Z축 회전각 (0~360도, 미수집시 null)")
+    beta: Optional[float] = Field(None, description="기기 X축 기울기 (-180~180도, 미수집시 null)")
+    gamma: Optional[float] = Field(None, description="기기 Y축 회전각 (-90~90도, 미수집시 null)")
+    screen_orientation_deg: Optional[int] = Field(0, description="화면 회전 각도 (0, 90, 180, 270)")
+    is_absolute: Optional[bool] = Field(False, description="지자기 기준 절대각 여부")
+
+class ConvertedCameraOrientation(BaseModel):
+    camera_heading_deg: Optional[float] = Field(None, description="화면 방향 보정된 카메라 렌즈 방위각 (0~360도, 미수집시 null)")
+    camera_pitch_deg: Optional[float] = Field(None, description="화면 방향 보정된 카메라 상하 틸트각 (-90~90도, 미수집시 null)")
+    camera_roll_deg: Optional[float] = Field(None, description="카메라 좌우 롤 각도 (미수집시 null)")
+    frame_aspect: Optional[str] = Field("PORTRAIT", description="촬영 화면 비율 (PORTRAIT/LANDSCAPE)")
+
+class PhonePositionData(BaseModel):
+    lat: float = Field(..., description="위도")
+    lng: float = Field(..., description="경도")
+    accuracy_m: Optional[float] = Field(None, description="스마트폰 GPS 오차 반경 (미터)")
+    altitude_m: Optional[float] = Field(None, description="스마트폰 보고 고도 (미수집시 null, 임의 드론 고도 생성 금지)")
+
+class PhoneWaypointItem(BaseModel):
+    seq: int = Field(..., description="시퀀스 번호")
+    timestamp: Optional[str] = Field(None, description="수집 시각 (ISO 8601)")
+    raw_gps: Optional[PhonePositionData] = Field(None, description="스마트폰 GPS 수집 원본")
+    filtered_gps: Optional[PhonePositionData] = Field(None, description="노이즈 필터링된 보행 좌표")
+    raw_sensor: Optional[RawSensorData] = Field(None, description="단말기 방향 센서 원본")
+    camera_orientation: Optional[ConvertedCameraOrientation] = Field(None, description="변환된 카메라 렌즈 방향")
+    composition_state: Optional[Dict[str, Any]] = Field(None, description="실시간 화면 구도 분석 상태")
+
+class ShootingPathCreate(BaseModel):
+    project_id: int = Field(..., description="촬영 프로젝트 ID")
+    shooting_number: Optional[int] = Field(None, description="동일 프로젝트 내 촬영 회차 (생략 시 자동 산출)")
+    tracking_source: str = Field("PHONE_GPS", description="위치 수집 출처: PHONE_GPS, SIMULATION (확장: DRONE_GPS)")
+    recommended_waypoints: Optional[List[Dict[str, Any]]] = Field(default_factory=list, description="권장 보행 촬영 동선")
+    actual_waypoints: Optional[List[Dict[str, Any]]] = Field(default_factory=list, description="스마트폰 수집 실제 보행 동선 및 센서 데이터")
+    corrected_waypoints: Optional[List[Dict[str, Any]]] = Field(default_factory=list, description="보정된 동선 가이드")
+    alpha_weight: Optional[float] = Field(0.3, description="보정 가중치 (0.0~1.0)")
+    deviation_score: Optional[float] = Field(None, description="권장 동선 대비 이탈도")
+    deviation_reason: Optional[str] = Field(None, description="이탈 사유 (NORMAL, WALKING_DETOUR, PHONE_SHAKE 등)")
+    is_valid: Optional[bool] = Field(True, description="차기 추천 반영 유효성 여부")
+
+class ShootingPathResponse(BaseModel):
+    path_id: int
+    project_id: int
+    user_id: Optional[int] = None
+    shooting_number: int
+    tracking_source: str
+    recommended_waypoints: Optional[List[Dict[str, Any]]] = None
+    actual_waypoints: Optional[List[Dict[str, Any]]] = None
+    corrected_waypoints: Optional[List[Dict[str, Any]]] = None
+    alpha_weight: float
+    deviation_score: Optional[float] = None
+    deviation_reason: Optional[str] = None
+    is_valid: bool
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+class ShootingPathSummaryItem(BaseModel):
+    path_id: int
+    project_id: int
+    shooting_number: int
+    tracking_source: str
+    waypoint_count: int
+    deviation_score: Optional[float] = None
+    deviation_reason: Optional[str] = None
+    is_valid: bool
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+class ShootingPathProjectSummary(BaseModel):
+    project_id: int
+    total_attempts: int
+    total_shooting_count: Optional[int] = None
+    latest_shooting_number: int
+    valid_paths_count: int
+    latest_path: Optional[ShootingPathResponse] = None
+    history: List[ShootingPathSummaryItem] = []
+
+
+class PathAnalysisDetailResponse(BaseModel):
+    is_valid: bool
+    deviation_score: Optional[float] = None
+    match_score: float
+    max_deviation_m: Optional[float] = None
+    avg_deviation_m: Optional[float] = None
+    average_deviation_m: Optional[float] = None
+    start_point_error_m: Optional[float] = None
+    end_point_error_m: Optional[float] = None
+    path_length_rec_m: float
+    path_length_act_m: float
+    alpha_weight: float
+    deviation_reason: str
+    composition_score: Optional[float] = None
+    advice_message: str
+    actionable_advice: Optional[str] = None
+    recommended_waypoints: List[Dict[str, Any]]
+    actual_waypoints: List[Dict[str, Any]]
+    corrected_waypoints: List[Dict[str, Any]]
+
+
+class NextRoundPathResponse(BaseModel):
+    project_id: int
+    next_shooting_number: int
+    target_shooting_number: Optional[int] = None
+    is_inherited_from_previous: bool
+    source_info: str
+    previous_shooting_number: Optional[int] = None
+    source_shooting_number: Optional[int] = None
+    previous_deviation_score: Optional[float] = None
+    previous_deviation_reason: Optional[str] = None
+    recommended_waypoints: List[Dict[str, Any]]
+
+
+# ==========================================
+# 장소 시각 자료 (LocationAsset) 스키마
+# ==========================================
+class LocationAssetCreate(BaseModel):
+    project_id: int = Field(..., description="촬영 프로젝트 ID")
+    is_common: Optional[bool] = Field(False, description="프로젝트 공통 자료 여부 (False: 모바일 현장 업로드)")
+    asset_type: str = Field(..., description="자료 유형: PANORAMA, SHORT_VIDEO, CAMERA_FRAME, KEY_FEATURE")
+    file_url: str = Field(..., description="파일 URL 또는 로컬 경로")
+    thumbnail_url: Optional[str] = Field(None, description="썸네일 URL")
+    detected_features: Optional[Dict[str, Any]] = Field(default_factory=dict, description="AI 객체 및 구도 특징점 분석 결과")
+    file_size_bytes: Optional[int] = Field(None, description="파일 크기 (바이트)")
+
+class LocationAssetResponse(LocationAssetCreate):
+    asset_id: int
+    user_id: Optional[int] = None
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+
+# ==========================================
+# 촬영 기법 카탈로그 (ShootingTechnique) 및 맞춤 추천 스키마
+# ==========================================
+class ShootingTechniqueItem(BaseModel):
+    technique_id: str
+    name_ko: str
+    category: str
+    support_phone: bool
+    support_drone: bool
+    required_sensors: List[str] = Field(default_factory=list)
+    guide_instruction: str
+
+
+class TechniqueCatalogItem(BaseModel):
+    technique_id: str
+    name: str
+    category: str
+    description: str
+    recommended_scenes: List[str]
+    required_environment: Dict[str, Any]
+    is_smartphone_supported: bool
+    is_drone_only: bool
+    drone_warning: Optional[str] = None
+    related_tags: List[str]
+    recommended_composition: str
+    precautions: str
+    execution_guide: str
+
+
+class TechniqueRecommendationItem(BaseModel):
+    technique_id: str
+    name: str
+    category: str
+    description: str
+    recommendation_score: float
+    recommendation_reason: str
+    related_composition: str
+    precautions: str
+    execution_guide: str
+    is_smartphone_supported: bool
+    is_drone_only: bool
+    drone_warning: Optional[str] = None
+    recommended_scenes: List[str] = Field(default_factory=list)
+    required_environment: Dict[str, Any] = Field(default_factory=dict)
+    related_tags: List[str] = Field(default_factory=list)
+    related_videos: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class PersonalizedRecommendationResponse(BaseModel):
+    project_id: Optional[int] = None
+    user_id: Optional[int] = None
+    user_context: str
+    count: int
+    recommendations: List[TechniqueRecommendationItem]
+
+
+class TechniqueSelectRequest(BaseModel):
+    technique_id: str = Field(..., description="선택할 촬영 기법 ID")
+
+
+class TechniqueSelectResponse(BaseModel):
+    status: str
+    project_id: int
+    selected_technique_id: str
+    technique_name: str
+    desired_techniques: List[str]
+    message: str
+
+
+class TechniqueFeedbackRequest(BaseModel):
+    technique_id: str = Field(..., description="피드백 대상 촬영 기법 ID")
+    shooting_number: Optional[int] = Field(1, description="촬영 회차 번호")
+    was_shot: bool = Field(True, description="실제 촬영 진행 여부")
+    satisfaction_score: int = Field(5, ge=1, le=5, description="만족도 점수 (1~5점)")
+    comment: Optional[str] = Field(None, description="사용자 피드백 코멘트")
+
+
+class TechniqueFeedbackResponse(BaseModel):
+    status: str
+    project_id: int
+    technique_id: str
+    satisfaction_score: int
+    was_shot: bool
+    applied_weight: float
+    updated_preference_score: float
+    message: str
+
 
 
 

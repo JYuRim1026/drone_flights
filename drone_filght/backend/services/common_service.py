@@ -1,3 +1,5 @@
+import uuid
+from datetime import datetime
 from sqlalchemy.orm import Session
 from backend.models.models import ShootingProject, User, UserSetting
 from backend.schemas.schemas import ShootingProjectCreate, UserSettingUpdate, WeatherResponse
@@ -21,9 +23,14 @@ class CommonService:
             lat = loc_data.get("latitude", 37.5284)
             lon = loc_data.get("longitude", 126.9328)
 
+        d_str = datetime.now().strftime("%Y%m%d")
+        r_str = uuid.uuid4().hex[:6].upper()
+        p_code = getattr(project_in, "project_code", None) or f"DRONE_{d_str}_{r_str}"
+
         new_proj = ShootingProject(
             title=project_in.title,
             place_name=project_in.place_name,
+            project_code=p_code,
             target_date=project_in.target_date,
             target_time=project_in.target_time,
             scene_intent=project_in.scene_intent,

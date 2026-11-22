@@ -53,6 +53,10 @@ class User(Base):
     preference_scores = relationship("UserPreferenceScore", back_populates="user", cascade="all, delete-orphan", foreign_keys="[UserPreferenceScore.user_id]")
     interactions = relationship("Interaction", back_populates="user", cascade="all, delete-orphan", foreign_keys="[Interaction.user_id]")
 
+    # 신규 관계 (1:N shooting_paths, 1:N location_assets)
+    shooting_paths = relationship("ShootingPath", back_populates="user", foreign_keys="[ShootingPath.user_id]")
+    location_assets = relationship("LocationAsset", back_populates="user", foreign_keys="[LocationAsset.user_id]")
+
 
 # ==========================================
 # 2. user_settings — 사용자 환경 설정 (1:1 관계)
@@ -244,6 +248,10 @@ class ShootingProject(Base):
     result_file_url = Column(String(500), nullable=True)
     analysis_completed_at = Column(DateTime, nullable=True)
 
+    # 신규 다중 기법 태그 컬럼 (사용자 희망 기법 & AI 추천 기법)
+    desired_techniques = Column(JSON, nullable=True, default=list)
+    recommended_techniques = Column(JSON, nullable=True, default=list)
+
     def __init__(self, **kwargs):
         # 양방향 필드 동기화 (title <-> project_name, place_name <-> shooting_location 등)
         t = kwargs.get("title") or kwargs.get("project_name")
@@ -270,6 +278,8 @@ class ShootingProject(Base):
     user = relationship("User", back_populates="shooting_projects")
     flight_request = relationship("FlightRequest", back_populates="projects")
     analyses = relationship("ShootingAnalysis", back_populates="project", cascade="all, delete-orphan", foreign_keys="[ShootingAnalysis.project_id]")
+    paths = relationship("ShootingPath", back_populates="project", cascade="all, delete-orphan", foreign_keys="[ShootingPath.project_id]")
+    assets = relationship("LocationAsset", back_populates="project", cascade="all, delete-orphan", foreign_keys="[LocationAsset.project_id]")
 
 
 @event.listens_for(ShootingProject, "after_insert")
@@ -349,6 +359,7 @@ class Video(Base):
     background = Column(Text, nullable=True)     # 배경 (도시/수변, 자연/산악, 바다/해안 등)
     time_slot = Column(Text, nullable=True)      # 촬영 시간대 (주간, 골든아워, 일몰, 야간 등)
     composition = Column(Text, nullable=True)    # 구도 (와이드 트래킹, 오빗, 버드아이 등)
+    content_techniques = Column(JSON, nullable=True, default=list) # 신규 다중 기법 태그 (["ground_orbit", "tracking_walk"] 등)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # 관계 설정 (1:N with interactions)
@@ -439,3 +450,82 @@ class ShootingAnalysis(Base):
 
     # 관계 설정 (N:1 with ShootingProject)
     project = relationship("ShootingProject", back_populates="analyses")
+
+
+# ==========================================
+# 12. shooting_paths — 휴대폰 촬영 동선(보행 궤적) 및 가이드 보정 관리
+# ==========================================
+class ShootingPath(Base):
+    __tablename__ = "shooting_paths"
+    __table_args__ = (
+        UniqueConstraint("project_id", "shooting_number", name="uq_project_shooting_number"),
+    )
+
+    path_id = Column(Integer, primary_key=True, autoincrement=True, index=True)
+    project_id = Column(Integer, ForeignKey("shooting_projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    # 동일 프로젝트 내 촬영 회차 (1회차, 2회차...)
+    shooting_number = Column(Integer, default=1, nullable=False, index=True)
+
+    # 위치 수집 출처 (현재: PHONE_GPS, SIMULATION 우선 지원 / 향후 확장: DRONE_GPS)
+    tracking_source = Column(String(30), default="PHONE_GPS", nullable=False)
+
+    # [권장 촬영 동선]: 사전 기획된 보행 동선 및 카메라 지향 목표
+    # [{"seq": 1, "lat": ..., "lng": ..., "target_heading": 180.0, "target_pitch": -10.0, "guide_msg": "..."}, ...]
+    recommended_waypoints = Column(JSON, nullable=True, default=list)
+
+    # [실제 휴대폰 수집 동선]: 휴대폰 GPS + 방향 센서(heading, pitch, roll) + 실시간 구도 분석
+    # 절대 드론 비행 경로로 취급하지 않으며, 단말기 수집 데이터만 온전히 보관
+    # [{"seq": 1, "timestamp": "...", "raw_gps": {...}, "camera_orientation": {...}, ...}]
+    actual_waypoints = Column(JSON, nullable=True, default=list)
+
+    # [보정된 동선 가이드]: 보행 흔들림 및 카메라 조준 오차를 다듬은 개선 가이드라인
+    corrected_waypoints = Column(JSON, nullable=True, default=list)
+
+    # 보정 가중치 및 편차 분석
+    alpha_weight = Column(Float, default=0.3, nullable=False)
+    deviation_score = Column(Float, nullable=True)      # 권장 동선/방향 대비 평균 이탈 오차
+    deviation_reason = Column(Text, nullable=True)     # NORMAL, WALKING_DETOUR, PHONE_SHAKE, GPS_ACCURACY_LOW 등
+    is_valid = Column(Boolean, default=True, nullable=False)  # 보행 이탈이 심할 경우 차기 추천 반영 제외(False)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # 호환성 별칭
+    id = synonym("path_id")
+
+    # 관계 설정
+    project = relationship("ShootingProject", back_populates="paths")
+    user = relationship("User", back_populates="shooting_paths", foreign_keys=[user_id])
+
+
+# ==========================================
+# 13. location_assets — 촬영 장소 시각 자료 (스마트폰 촬영 파노라마/영상/캡처)
+# ==========================================
+class LocationAsset(Base):
+    __tablename__ = "location_assets"
+
+    asset_id = Column(Integer, primary_key=True, autoincrement=True, index=True)
+    project_id = Column(Integer, ForeignKey("shooting_projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    # 사전 제공 기본 자료(True) vs 스마트폰 현장 업로드 개인 자료(False)
+    is_common = Column(Boolean, default=False, nullable=False, index=True)
+
+    # 자료 종류 (PANORAMA, SHORT_VIDEO, CAMERA_FRAME, KEY_FEATURE)
+    asset_type = Column(String(50), nullable=False)
+    file_url = Column(String(500), nullable=False)
+    thumbnail_url = Column(String(500), nullable=True)
+
+    # 스마트폰 프레임에서 감지된 피사체/특징점 메타데이터
+    detected_features = Column(JSON, nullable=True, default=dict)
+    file_size_bytes = Column(Integer, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # 호환성 별칭
+    id = synonym("asset_id")
+
+    # 관계 설정
+    project = relationship("ShootingProject", back_populates="assets")
+    user = relationship("User", back_populates="location_assets", foreign_keys=[user_id])

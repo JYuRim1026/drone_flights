@@ -10,7 +10,9 @@ from backend.models.models import (
     SurveyPreference,
     UserPreferenceScore,
     Interaction,
-    ShootingAnalysis
+    ShootingAnalysis,
+    ShootingPath,
+    LocationAsset
 )
 
 __all__ = [
@@ -25,5 +27,7 @@ __all__ = [
     "SurveyPreference",
     "UserPreferenceScore",
     "Interaction",
-    "ShootingAnalysis"
+    "ShootingAnalysis",
+    "ShootingPath",
+    "LocationAsset"
 ]

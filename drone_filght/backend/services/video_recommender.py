@@ -18,9 +18,12 @@ from contextlib import contextmanager
 CATEGORIES = ("background", "time_slot", "composition")
 
 EVENT_WEIGHTS = {
-    "view": 0.5,
-    "like": 2.0,
-    "save": 3.0
+    "view": 1.0,
+    "repeat_view": 2.5,
+    "like": 4.0,
+    "save": 5.0,
+    "select": 6.0,
+    "satisfaction": 8.0
 }
 
 SORTS = ("recommended", "popular", "latest")
@@ -338,9 +341,9 @@ class VideoRecommender:
     ):
 
         if event_type not in EVENT_WEIGHTS:
-            raise ValueError("view, like, save만 가능합니다.")
+            raise ValueError(f"지원하지 않는 이벤트입니다: {event_type}. ({', '.join(EVENT_WEIGHTS.keys())} 가능)")
 
-        if event_type == "view" and not active:
+        if event_type in ("view", "repeat_view") and not active:
             raise ValueError("조회 기록은 취소할 수 없습니다.")
 
         with self.connect() as db:
@@ -405,8 +408,14 @@ class VideoRecommender:
                         utc_now()
                     ))
 
-            else:
+            elif event_type in ("view", "repeat_view"):
+                # 이전 조회 이력이 있다면 repeat_view로 승격하여 2.5 가중치 부여
+                prev_views = db.execute("""
+                    SELECT COUNT(*) FROM interactions
+                    WHERE user_id = ? AND video_id = ? AND event_type IN ('view', 'repeat_view') AND active = 1
+                """, (user_id, video_id)).fetchone()[0]
 
+                actual_etype = "repeat_view" if (prev_views > 0 or event_type == "repeat_view") else "view"
                 db.execute("""
                     INSERT INTO interactions (
                         user_id,
@@ -415,35 +424,53 @@ class VideoRecommender:
                         active,
                         occurred_at
                     )
-                    VALUES (?, ?, 'view', 1, ?)
-                """, (user_id, video_id, utc_now()))
+                    VALUES (?, ?, ?, 1, ?)
+                """, (user_id, video_id, actual_etype, utc_now()))
+
+            else:
+                db.execute("""
+                    INSERT INTO interactions (
+                        user_id,
+                        video_id,
+                        event_type,
+                        active,
+                        occurred_at
+                    )
+                    VALUES (?, ?, ?, 1, ?)
+                """, (user_id, video_id, event_type, utc_now()))
 
             self.refresh_preference_scores(db, user_id)
 
     # ---------------------------------
     # 5-1. 직관적인 상호작용 액션 라우팅
-    # (조회, 좋아요, 좋아요 취소, 저장, 저장 취소)
+    # (조회, 좋아요, 좋아요 취소, 저장, 저장 취소, 선택, 만족도)
     # ---------------------------------
 
     def record_interaction(self, user_id, video_id, action):
         """
         사용자 행동 액션:
-        - 'view': 영상 조회 (조회수 1 증가)
-        - 'like': 좋아요 반영
+        - 'view': 영상 조회 (단순 조회 1.0점, 반복 시청 2.5점)
+        - 'repeat_view': 반복 시청 (2.5점)
+        - 'like': 좋아요 반영 (4.0점)
         - 'unlike': 좋아요 취소 반영
-        - 'save': 저장(북마크) 반영
+        - 'save': 저장(북마크) 반영 (5.0점)
         - 'unsave': 저장 취소 반영
+        - 'select': 프로젝트 촬영 기법 선택 (6.0점)
+        - 'satisfaction': 촬영 후 만족도 반영 (8.0점)
         """
         action_map = {
             "view": ("view", True),
+            "repeat_view": ("repeat_view", True),
             "like": ("like", True),
             "unlike": ("like", False),
             "save": ("save", True),
-            "unsave": ("save", False)
+            "unsave": ("save", False),
+            "select": ("select", True),
+            "satisfaction": ("satisfaction", True)
         }
 
         if action not in action_map:
-            raise ValueError(f"지원하지 않는 액션입니다: {action}. ('view', 'like', 'unlike', 'save', 'unsave' 가능)")
+            raise ValueError(f"지원하지 않는 액션입니다: {action}. ({', '.join(action_map.keys())} 가능)")
 
         event_type, active = action_map[action]
         self.record_event(user_id, video_id, event_type, active)
@@ -513,7 +540,7 @@ class VideoRecommender:
                 / 86400
             )
 
-            weight = EVENT_WEIGHTS[event["event_type"]]
+            weight = EVENT_WEIGHTS.get(event["event_type"], 1.0)
 
             # 오래된 기록의 영향력 감소
             adjusted_weight = weight * (0.5 ** (days / 90))
@@ -605,7 +632,8 @@ class VideoRecommender:
         self,
         user_id,
         sort="recommended",
-        limit=4
+        limit=4,
+        technique=None
     ):
 
         if sort not in SORTS:
@@ -621,6 +649,31 @@ class VideoRecommender:
             videos = db.execute("""
                 SELECT * FROM videos
             """).fetchall()
+
+            if technique:
+                import json
+                t_str = str(technique).strip().lower()
+                filtered = []
+                for v in videos:
+                    c_techs = []
+                    try:
+                        v_keys = v.keys() if hasattr(v, "keys") else []
+                        if "content_techniques" in v_keys and v["content_techniques"]:
+                            raw = v["content_techniques"]
+                            c_techs = json.loads(raw) if isinstance(raw, str) else list(raw)
+                    except Exception:
+                        c_techs = []
+
+                    matched = False
+                    if any(t_str == str(ct).strip().lower() for ct in c_techs):
+                        matched = True
+                    elif t_str in str(v["composition"]).lower() or t_str in str(v["title"]).lower():
+                        matched = True
+
+                    if matched:
+                        filtered.append(v)
+                if filtered:
+                    videos = filtered
 
             preferences = db.execute("""
                 SELECT

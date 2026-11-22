@@ -6338,6 +6338,7 @@ function initProjectSync() {
   });
 
   renderProjectQr(activeProjectCode);
+  loadProjectShootingHistory(activeProjectCode);
 }
 
 function renderProjectQr(projCode) {
@@ -6349,19 +6350,82 @@ function renderProjectQr(projCode) {
   }
 }
 
-function createNewShootingProject() {
+async function createNewShootingProject() {
+  const query = $('cinemaQueryInput')?.value.trim() || '여의도 한강공원 일몰 골든아워 시네마틱 촬영';
+  const token = localStorage.getItem('sky_auth_token');
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
   const d = new Date();
-  const dateStr = d.getFullYear() + String(d.getMonth()+1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
-  const rand = Math.floor(100 + Math.random() * 900);
-  activeProjectCode = `DRONE_${dateStr}_${rand}`;
-  
+  const dateStr = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  const fallbackCode = `DRONE_${dateStr.replace(/-/g, '')}_${Math.floor(100 + Math.random() * 900)}`;
+
+  const payload = {
+    title: query.length > 30 ? query.substring(0, 30) + '...' : query,
+    place_name: query.includes('해운대') ? '부산 해운대 해변' : query.includes('성산일출봉') ? '제주 성산일출봉' : '서울 한강공원',
+    target_date: dateStr,
+    target_time: '15:30 ~ 17:30',
+    scene_intent: query,
+    latitude: 37.5284,
+    longitude: 126.9328,
+    recommended_mode: '패럴랙스 리빌 & 선셋 아크',
+    recommended_shutter: '1/50s',
+    recommended_nd_filter: 'ND16'
+  };
+
+  try {
+    const res = await fetch(`${getApiBaseUrl()}/api/common/projects`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload)
+    });
+    if (res.ok) {
+      const data = await res.json();
+      activeProjectCode = data.project_code || fallbackCode;
+      toast(`새 촬영 프로젝트 [${activeProjectCode}]가 서버에 정상 등록되었습니다!`);
+    } else {
+      activeProjectCode = fallbackCode;
+      toast(`새 촬영 프로젝트 [${activeProjectCode}]가 로컬 생성되었습니다.`);
+    }
+  } catch (err) {
+    activeProjectCode = fallbackCode;
+    toast(`새 촬영 프로젝트 [${activeProjectCode}]가 생성되었습니다.`);
+  }
+
   $('projectStatusBadge').textContent = '스마트폰 접속 대기 중';
   $('projectStatusBadge').style.background = '#fef3c7';
   $('projectStatusBadge').style.color = '#92400e';
   $('syncedResultBox').style.display = 'none';
 
   renderProjectQr(activeProjectCode);
-  toast(`새 촬영 프로젝트 [${activeProjectCode}]가 생성되었습니다!`);
+  loadProjectShootingHistory(activeProjectCode);
+}
+
+async function loadProjectShootingHistory(identifier) {
+  try {
+    const res = await fetch(`${getApiBaseUrl()}/api/mobile/projects/resolve/${encodeURIComponent(identifier || '1')}`);
+    if (res.ok) {
+      const pData = await res.json();
+      const pId = pData.project_id || pData.id || 1;
+      const sumRes = await fetch(`${getApiBaseUrl()}/api/mobile/projects/${pId}/paths/summary`);
+      if (sumRes.ok) {
+        const sum = await sumRes.json();
+        const totalCount = sum.total_shooting_count ?? sum.total_attempts ?? 0;
+        if (totalCount > 0) {
+          const box = $('syncedResultBox');
+          if (box) {
+            box.style.display = 'block';
+            $('syncResultTime').textContent = `누적 ${totalCount}회차 촬영 완료`;
+            $('syncResultSummary').innerHTML = `
+              스마트폰 보행 동선(PHONE_GPS) 누적: <b>${totalCount}회</b> (최신 ${sum.latest_shooting_number}회차) · 유효 동선: <b>${sum.valid_paths_count}건</b>
+            `;
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('PC 프로젝트 촬영 이력 로드 예외:', e);
+  }
 }
 
 function onMobileResultReceived(res) {
@@ -6373,11 +6437,13 @@ function onMobileResultReceived(res) {
   if (box) {
     box.style.display = 'block';
     $('syncResultTime').textContent = new Date().toLocaleTimeString('ko-KR');
+    const scoreVal = typeof res.score === 'number' ? Math.round(res.score) : 94;
     $('syncResultSummary').innerHTML = `
-      AI 구도 일치도: <b>${res.score || 94}점 (${res.rule || '골든 래티오 구도'})</b> · 셔터: <b>${res.shutter || '1/240s'}</b> · ISO: <b>${res.iso || 100}</b>
+      스마트폰 보행 동선(${res.tracking_source || 'PHONE_GPS'}) 수신됨 · AI 일치도: <b>${scoreVal}점</b> · ${res.shooting_number ? res.shooting_number + '회차' : '녹화 완료'}
     `;
   }
   toast(`[${activeProjectCode}] 모바일 현장 촬영 결과가 PC로 실시간 동기화되었습니다!`);
+  loadProjectShootingHistory(res.project_code || activeProjectCode);
 }
 
 function simulateMobileSync() {

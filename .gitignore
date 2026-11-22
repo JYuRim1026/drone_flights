@@ -37,6 +37,11 @@ drone_filght/backend/.env
 *.sqlite3
 !drone_filght/backend/sky_command_demo.db
 
+# Uploads
+drone_filght/backend/uploads/**
+!drone_filght/backend/uploads/
+!drone_filght/backend/uploads/.gitkeep
+
 # IDE / Editor
 .vscode/
 .idea/

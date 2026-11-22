@@ -198,6 +198,113 @@ class GeminiClient:
         return None, None
 
     @classmethod
+    def generate_vision(
+        cls,
+        prompt: str,
+        image_base64: str,
+        mime_type: str = "image/jpeg",
+        system_instruction: Optional[str] = None,
+        api_key: Optional[str] = None,
+        model: Optional[str] = None,
+        timeout: Optional[float] = None,
+    ) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Google Gemini REST API (v1beta generateContent) 멀티모달 이미지 분석.
+        이미지(base64)와 프롬프트를 함께 전송하여 JSON 형식 등의 분석 결과를 생성합니다.
+        """
+        effective_key = (api_key or getattr(settings, "GEMINI_API_KEY", "") or "").strip()
+        if not effective_key or not (image_base64 or "").strip():
+            return None, None
+
+        clean_base64 = image_base64
+        if "," in clean_base64:
+            header, clean_base64 = clean_base64.split(",", 1)
+            if "image/png" in header:
+                mime_type = "image/png"
+            elif "image/webp" in header:
+                mime_type = "image/webp"
+
+        endpoint = (getattr(settings, "GEMINI_API_ENDPOINT", None) or _DEFAULT_ENDPOINT).rstrip("/")
+        read_timeout = float(timeout or getattr(settings, "GEMINI_API_TIMEOUT", 10.0))
+
+        parts = [
+            {
+                "inlineData": {
+                    "mimeType": mime_type,
+                    "data": clean_base64.strip()
+                }
+            },
+            {"text": prompt.strip()}
+        ]
+
+        payload: Dict[str, Any] = {
+            "contents": [{"role": "user", "parts": parts}],
+            "generationConfig": {
+                "temperature": 0.2,
+                "responseMimeType": "application/json"
+            }
+        }
+        if system_instruction and system_instruction.strip():
+            payload["systemInstruction"] = {
+                "parts": [{"text": system_instruction.strip()}]
+            }
+
+        headers = {
+            "Content-Type": "application/json",
+            "X-goog-api-key": effective_key,
+        }
+
+        models_to_try = cls._candidate_models(primary_model=model)[:2]
+        for idx, model_name in enumerate(models_to_try):
+            url = f"{endpoint}/{model_name}:generateContent"
+            try:
+                resp = cls._session.post(
+                    url,
+                    headers=headers,
+                    json=payload,
+                    timeout=(3.0, read_timeout),
+                )
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
+                logger.warning(
+                    "Gemini vision connection failed or timed out (%s): %s",
+                    model_name,
+                    cls._mask_secret(str(exc), effective_key),
+                )
+                break
+            except requests.RequestException as exc:
+                logger.warning(
+                    "Gemini vision request error (%s): %s",
+                    model_name,
+                    cls._mask_secret(str(exc), effective_key),
+                )
+                break
+
+            if resp.status_code == 200:
+                try:
+                    data = resp.json()
+                except ValueError:
+                    logger.warning("Gemini vision returned invalid JSON (%s)", model_name)
+                    continue
+                reply = cls._extract_reply_text(data)
+                if reply:
+                    return reply, model_name
+                logger.warning("Gemini vision returned empty candidate parts (%s)", model_name)
+                continue
+
+            logger.warning(
+                "Gemini vision HTTP %s on %s: %s",
+                resp.status_code,
+                model_name,
+                cls._mask_secret(resp.text[:200], effective_key),
+            )
+            if resp.status_code in (400, 401, 403):
+                break
+            if idx == len(models_to_try) - 1:
+                break
+
+        return None, None
+
+    @classmethod
     def ask_ai(
         cls,
         user_prompt: str,

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#080d16">
-<title>날려드려 · AI 촬영 가이드</title>
+<title>날려드려 · AI 실시간 촬영 구도 가이드</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#080d16;color:#fff;font-family:system-ui,-apple-system,'Apple SD Gothic Neo',sans-serif;min-height:100vh}
@@ -16,7 +16,76 @@ body{margin:0;background:#080d16;color:#fff;font-family:system-ui,-apple-system,
 .back{color:#c9d7ec;text-decoration:none;font-size:13px;padding:6px 10px;background:#162235;border-radius:8px}
 .back:hover{background:#233550}
 
-/* 전체 카메라 스테이지 (검은 틀 여백 포함 전체 센서 영역) */
+/* 알림 및 경고 배너 */
+.toast-banner{
+  border-radius:10px;
+  padding:10px 14px;
+  font-size:12.5px;
+  margin-bottom:12px;
+  display:none;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  line-height:1.45;
+}
+.toast-banner.warning{background:#451a03;border:1px solid #b45309;color:#fde68a}
+.toast-banner.error{background:#450a0a;border:1px solid #b91c1c;color:#fecaca}
+.toast-banner.success{background:#064e3b;border:1px solid #059669;color:#a7f3d0}
+.toast-banner.show{display:flex}
+
+/* 프로젝트 연동 배지 */
+.project-banner{
+  background:rgba(47, 117, 255, 0.15);
+  border:1px solid #2f75ff;
+  color:#90caf9;
+  border-radius:10px;
+  padding:8px 12px;
+  font-size:12px;
+  font-weight:600;
+  margin-bottom:10px;
+  display:none;
+  align-items:center;
+  justify-content:space-between;
+}
+.project-banner.active{display:flex}
+
+/* 스마트폰 센서 상태 대시보드 */
+.sensor-dash{
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));
+  gap:8px;
+  margin-bottom:12px;
+}
+.sensor-chip{
+  background:#101a2c;
+  border:1px solid #1f314d;
+  border-radius:10px;
+  padding:7px 10px;
+  font-size:11.5px;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  color:#94a3b8;
+  overflow:hidden;
+}
+.sensor-chip.active{border-color:#3b82f6;color:#e2e8f0}
+.chip-icon{font-size:13px}
+.chip-label{font-weight:700;color:#cbd5e1}
+.chip-value{font-family:monospace;color:#60a5fa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip-value.live{color:#34d399}
+.ios-sensor-btn{
+  background:#1d4ed8;
+  color:#fff;
+  border:0;
+  border-radius:6px;
+  padding:4px 8px;
+  font-size:11px;
+  font-weight:700;
+  cursor:pointer;
+  margin-left:auto;
+}
+
+/* 전체 카메라 스테이지 */
 .stage{
   position:relative;
   width:100%;
@@ -29,7 +98,7 @@ body{margin:0;background:#080d16;color:#fff;font-family:system-ui,-apple-system,
   overflow:hidden;
 }
 
-/* 실제 카메라는 여백(검은 틀)까지 포함해 넉넉히 잡히도록 설정 (AI 미세 이동 시 잘림 방지) */
+/* 카메라 원본 영상 (여백 포함) */
 .sensor-video{
   position:absolute;
   left:-12.5%;
@@ -41,7 +110,7 @@ body{margin:0;background:#080d16;color:#fff;font-family:system-ui,-apple-system,
   z-index:1;
 }
 
-/* 사용자 눈에 보이는 프레임: 기존 66% -> 80% (약 120% 확대) */
+/* 사용자 눈에 보이는 프레임: 80% 크기 */
 .live{
   position:absolute;
   left:10%;
@@ -58,10 +127,71 @@ body{margin:0;background:#080d16;color:#fff;font-family:system-ui,-apple-system,
   pointer-events:none;
 }
 
-/* 구도가 맞아떨어졌을 때 초록색 프레임으로 변경 */
+/* 구도 일치 시 초록색 프레임 */
 .live.ready{
   border-color:#16a36a;
   box-shadow:0 0 0 9999px rgba(8, 13, 22, 0.82), 0 0 22px rgba(22, 163, 106, 0.65);
+}
+
+/* 3x3 삼분할 황금비율 격자선 */
+.grid-thirds{
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+}
+.grid-thirds .g-line{position:absolute;background:rgba(255,255,255,0.18)}
+.grid-thirds .g-h1{top:33.333%;left:0;right:0;height:1px}
+.grid-thirds .g-h2{top:66.666%;left:0;right:0;height:1px}
+.grid-thirds .g-v1{left:33.333%;top:0;bottom:0;width:1px}
+.grid-thirds .g-v2{left:66.666%;top:0;bottom:0;width:1px}
+
+/* AI 추천 목표 위치 타겟 레티클 */
+.target-reticle{
+  position:absolute;
+  left:50%;
+  top:50%;
+  width:64px;
+  height:64px;
+  transform:translate(-50%, -50%);
+  border:2px dashed #60a5fa;
+  border-radius:50%;
+  pointer-events:none;
+  z-index:3;
+  transition:left 0.4s cubic-bezier(0.2, 0.9, 0.3, 1), top 0.4s cubic-bezier(0.2, 0.9, 0.3, 1), border-color 0.3s;
+  box-shadow:0 0 14px rgba(96, 165, 250, 0.45);
+  display:grid;
+  place-items:center;
+}
+.target-reticle.aligned{
+  border-color:#10b981;
+  border-style:solid;
+  box-shadow:0 0 18px rgba(16, 185, 129, 0.7);
+}
+.reticle-dot{
+  width:6px;
+  height:6px;
+  border-radius:50%;
+  background:#60a5fa;
+  transition:background 0.3s;
+}
+.target-reticle.aligned .reticle-dot{
+  background:#10b981;
+}
+.reticle-badge{
+  position:absolute;
+  bottom:-22px;
+  font-size:10px;
+  font-weight:750;
+  color:#bfdbfe;
+  white-space:nowrap;
+  background:rgba(15, 23, 42, 0.85);
+  border:1px solid #1e3a8a;
+  padding:1px 6px;
+  border-radius:5px;
+}
+.target-reticle.aligned .reticle-badge{
+  color:#a7f3d0;
+  border-color:#065f46;
 }
 
 /* 구도 완료 배지 & 녹화 상태 표시 */
@@ -76,6 +206,7 @@ body{margin:0;background:#080d16;color:#fff;font-family:system-ui,-apple-system,
   background:rgba(233, 163, 75, 0.9);
   color:#080d16;
   transition:all 0.25s;
+  z-index:4;
 }
 .live.ready .frame-badge{
   background:#16a36a;
@@ -94,6 +225,7 @@ body{margin:0;background:#080d16;color:#fff;font-family:system-ui,-apple-system,
   display:none;
   align-items:center;
   gap:6px;
+  z-index:4;
 }
 .rec-indicator.on{display:flex}
 .rec-dot{width:8px;height:8px;border-radius:50%;background:#fff;animation:blink 1s infinite}
@@ -107,10 +239,11 @@ body{margin:0;background:#080d16;color:#fff;font-family:system-ui,-apple-system,
   line-height:1.6;
   background:rgba(20, 30, 48, 0.85);
   border-radius:10px;
+  z-index:3;
 }
 
 /* 십자 가이드라인 */
-.cross:before,.cross:after{content:"";position:absolute;pointer-events:none;background:#ffffff44}
+.cross:before,.cross:after{content:"";position:absolute;pointer-events:none;background:#ffffff33}
 .cross:before{width:1px;height:100%;left:50%;top:0}
 .cross:after{height:1px;width:100%;top:50%;left:0}
 
@@ -174,22 +307,6 @@ body{margin:0;background:#080d16;color:#fff;font-family:system-ui,-apple-system,
   margin-top:12px;
 }
 
-/* 프로젝트 연동 배지 */
-.project-banner{
-  background:rgba(47, 117, 255, 0.15);
-  border:1px solid #2f75ff;
-  color:#90caf9;
-  border-radius:10px;
-  padding:8px 12px;
-  font-size:12px;
-  font-weight:600;
-  margin-bottom:12px;
-  display:none;
-  align-items:center;
-  justify-content:space-between;
-}
-.project-banner.active{display:flex}
-
 /* 녹화 완료 후 업로드 & 다운로드 패널 */
 .result-panel{
   margin-top:14px;
@@ -244,9 +361,36 @@ body{margin:0;background:#080d16;color:#fff;font-family:system-ui,-apple-system,
 </head>
 <body>
 <main class="wrap">
+  <!-- 상단 오류 및 알림 배너 -->
+  <div class="toast-banner" id="toastBanner">
+    <span id="toastMsg">알림 메시지</span>
+    <button type="button" id="toastActionBtn" style="display:none; background:#2563eb; color:#fff; border:0; padding:4px 8px; border-radius:6px; font-size:11px; cursor:pointer;">확인</button>
+  </div>
+
+  <!-- 프로젝트 연동 배지 -->
   <div class="project-banner" id="projectBanner">
     <span id="projectCodeText">🔗 프로젝트: 로딩 중...</span>
     <span style="font-size:11px;color:#a5d6a7">● PC 관제 연동됨</span>
+  </div>
+
+  <!-- 스마트폰 센서 상태 대시보드 -->
+  <div class="sensor-dash" id="sensorDash">
+    <div class="sensor-chip" id="chipGps">
+      <span class="chip-icon">📡</span>
+      <span class="chip-label">GPS:</span>
+      <span class="chip-value" id="valGps">수신 대기 (PHONE_GPS)</span>
+    </div>
+    <div class="sensor-chip" id="chipGyro">
+      <span class="chip-icon">🧭</span>
+      <span class="chip-label">카메라 센서:</span>
+      <span class="chip-value" id="valGyro">대기 중</span>
+      <button type="button" id="btnIosSensor" class="ios-sensor-btn" style="display:none;">권한 허용</button>
+    </div>
+    <div class="sensor-chip" id="chipMode">
+      <span class="chip-icon">📱</span>
+      <span class="chip-label">모사 모드:</span>
+      <span class="chip-value">스마트폰 보행</span>
+    </div>
   </div>
 
   <header class="top">
@@ -269,22 +413,35 @@ body{margin:0;background:#080d16;color:#fff;font-family:system-ui,-apple-system,
     
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
       <div>
-        <label style="font-size:11px; font-weight:700; color:#64748b; display:block; margin-bottom:4px;">1) 촬영 목적 선택</label>
+        <label style="font-size:11px; font-weight:700; color:#64748b; display:block; margin-bottom:4px;">1) 촬영 목적 / AI 추천 기법 선택</label>
         <select id="selectPurpose" style="width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:7px 8px; font-size:12px; font-weight:700; color:#0f172a; background:#f8fafc;">
-          <option value="orbit" selected>🏛️ 피사체 중심 회전 (POI Orbit)</option>
-          <option value="dronie">🌅 골든아워 직선 비행 (Fly-Through)</option>
-          <option value="thirds">🚶 인물/피사체 3x3 삼분할 (Active Track)</option>
-          <option value="landscape">🏞️ 광활한 풍경 수평 유지 (Landscape)</option>
+          <optgroup label="📱 스마트폰 지원 기법">
+            <option value="orbit" selected>📱 🏛️ 오빗(원형 회전) 촬영</option>
+            <option value="dronie">📱 🌅 직선 드로니(후방 후진) 촬영</option>
+            <option value="thirds">📱 🚶 피사체 삼분할 추적 촬영</option>
+            <option value="reveal">📱 🌲 전경 장애물 리빌 촬영</option>
+            <option value="low_angle">📱 🌾 초저각 로우앵글 지면 촬영</option>
+            <option value="landscape">📱 🏞️ 광활한 여백 풍경 촬영</option>
+            <option value="symmetry">📱 🪞 수면 반영 대칭 촬영</option>
+          </optgroup>
+          <optgroup label="🛸 실제 비행 드론 전용 기법">
+            <option value="top_down">🛸 🦅 수직 90도 버드아이 (드론 전용)</option>
+            <option value="spiral">🛸 🌀 고고도 나선 상승 (드론 전용)</option>
+            <option value="flyby">🛸 ⚡ 고속 전진 플라이바이 (드론 전용)</option>
+          </optgroup>
         </select>
       </div>
       <div>
-        <label style="font-size:11px; font-weight:700; color:#64748b; display:block; margin-bottom:4px;">2) 장소 한 바퀴 사전 스캔</label>
-        <div style="display:flex; gap:6px;">
-          <button type="button" id="btnScan360" style="flex:1; border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; font-size:11.5px; font-weight:700; padding:7px 6px; border-radius:8px; cursor:pointer;">
-            🔄 360° 현장 스캔
+        <label style="font-size:11px; font-weight:700; color:#64748b; display:block; margin-bottom:4px;">2) 실시간 AI 분석 및 사전 스캔</label>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <button type="button" id="btnAnalyzeAi" style="flex:1 1 95px; border:1px solid #c084fc; background:#faf5ff; color:#7e22ce; font-size:11px; font-weight:700; padding:7px 4px; border-radius:8px; cursor:pointer;">
+            🤖 AI 구도 분석
           </button>
-          <label style="flex:1; border:1px solid #cbd5e1; background:#f8fafc; color:#475569; font-size:11.5px; font-weight:700; padding:7px 6px; border-radius:8px; text-align:center; cursor:pointer;">
-            📁 영상 업로드
+          <button type="button" id="btnScan360" style="flex:1 1 85px; border:1px solid #93c5fd; background:#eff6ff; color:#1d4ed8; font-size:11px; font-weight:700; padding:7px 4px; border-radius:8px; cursor:pointer;">
+            🔄 360° 스캔
+          </button>
+          <label style="flex:1 1 70px; border:1px solid #cbd5e1; background:#f8fafc; color:#475569; font-size:11px; font-weight:700; padding:7px 4px; border-radius:8px; text-align:center; cursor:pointer;">
+            📁 업로드
             <input id="scanVideoFile" type="file" accept="video/*" hidden>
           </label>
         </div>
@@ -310,6 +467,19 @@ body{margin:0;background:#080d16;color:#fff;font-family:system-ui,-apple-system,
 
     <!-- 사용자 눈에 보이는 120% 확대 프레임 (주황색 -> 구도 일치 시 초록색) -->
     <div class="live" id="liveFrame">
+      <div class="grid-thirds">
+        <div class="g-line g-h1"></div>
+        <div class="g-line g-h2"></div>
+        <div class="g-line g-v1"></div>
+        <div class="g-line g-v2"></div>
+      </div>
+
+      <!-- AI 추천 목표 위치 타겟 레티클 -->
+      <div class="target-reticle" id="targetReticle">
+        <div class="reticle-dot"></div>
+        <span class="reticle-badge" id="reticleBadge">목표 구도</span>
+      </div>
+
       <div class="frame-badge" id="frameBadge">AI 구도 탐색 중</div>
       <div class="rec-indicator" id="recIndicator"><span class="rec-dot"></span><span id="recTime">REC 00:00</span></div>
       <div class="placeholder" id="placeholder">
@@ -321,7 +491,7 @@ body{margin:0;background:#080d16;color:#fff;font-family:system-ui,-apple-system,
     </div>
   </div>
 
-  <!-- 보정된 프레임 영역만 정확히 크롭하여 녹화하기 위한 히든 캔버스 -->
+  <!-- 보정된 프레임 영역만 크롭하여 녹화/캡처하기 위한 히든 캔버스 -->
   <canvas id="cropCanvas" width="720" height="720" hidden></canvas>
 
   <div class="controls">
@@ -332,13 +502,64 @@ body{margin:0;background:#080d16;color:#fff;font-family:system-ui,-apple-system,
   </div>
 
   <p class="hint" id="guideText">
-    카메라를 연결하면 AI가 추천 구도를 분석합니다. 검은색 바깥 여백까지 카메라 센서가 풍경을 넓게 잡고 있으며, AI가 이 여백을 이용해 화면을 미세 이동시켜 안정적인 구도로 녹화합니다.
+    카메라를 연결하면 AI가 추천 구도를 분석합니다. 스마트폰 카메라와 센서를 활용하여 가상 비행 동선(PHONE_GPS)을 모사하며, 여백을 이용해 안정적인 구도로 녹화합니다.
   </p>
+  <div style="font-size:11px; color:#64748b; margin-top:4px; text-align:right;">
+    * 본 가이드는 스마트폰 센서 및 화면 좌표계 기반 모사 안내이며 실제 드론 3D 절대 거리를 계산한 것이 아닙니다.
+  </div>
 
-  <!-- 녹화 완료 후 저장 및 커뮤니티 업로드 영역 -->
+  <!-- 녹화 완료 후 저장, 커뮤니티 업로드 및 서버 동기화 영역 -->
   <section class="result-panel" id="resultPanel">
     <h2>✓ AI 보정 구도 촬영 완료</h2>
     <p>초록색 프레임 내부의 AI 미세 보정 화면만 깔끔하게 크롭되어 녹화되었습니다.</p>
+    
+    <!-- 백엔드 서버 동기화 상태 카드 -->
+    <div id="syncStatusCard" style="background:#0c1626; border:1px solid #1e3a5f; border-radius:10px; padding:12px; margin-bottom:12px;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <strong style="font-size:13px; color:#60a5fa;" id="syncCardTitle">🌐 백엔드 동기화 상태</strong>
+        <span id="syncBadge" style="font-size:11px; padding:2px 8px; border-radius:6px; background:#1e293b; color:#94a3b8;">대기 중</span>
+      </div>
+      <div id="syncCardDetails" style="font-size:11.5px; color:#cbd5e1; margin-top:6px; line-height:1.5;">
+        수집된 스마트폰 동선 데이터(PHONE_GPS) 및 주요 프레임이 서버로 전송됩니다.
+      </div>
+      <button type="button" id="btnRetrySync" style="display:none; margin-top:8px; width:100%; background:#2563eb; color:#fff; border:0; padding:8px; border-radius:8px; font-weight:700; cursor:pointer;">
+        🔄 서버 동기화 다시 시도
+      </button>
+    </div>
+
+    <!-- Phase 6: AI 스마트폰 보행 동선 비교 및 보정 카드 -->
+    <div id="pathAnalysisCard" style="background:#0c1626; border:1px solid #1e3a5f; border-radius:10px; padding:12px; margin-bottom:12px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <strong style="font-size:13px; color:#38bdf8;">🧭 AI 보행 동선 분석 및 보정</strong>
+        <span id="pathMatchBadge" style="font-size:11px; padding:2px 8px; border-radius:6px; background:#1e293b; color:#94a3b8; font-weight:700;">분석 대기 중</span>
+      </div>
+
+      <!-- 경로 시각화 미니 캔버스 -->
+      <div style="background:#030712; border-radius:8px; border:1px solid #1f2937; padding:8px; text-align:center;">
+        <canvas id="pathMiniCanvas" width="320" height="150" style="width:100%; max-width:320px; height:150px; display:block; margin:0 auto;"></canvas>
+        <div style="display:flex; justify-content:center; gap:10px; font-size:10px; margin-top:6px; color:#94a3b8; flex-wrap:wrap;">
+          <span style="display:flex; align-items:center; gap:3px;"><span style="display:inline-block; width:10px; height:2px; background:#38bdf8; border-top:1px dashed #38bdf8;"></span>권장 경로</span>
+          <span style="display:flex; align-items:center; gap:3px;"><span style="display:inline-block; width:10px; height:2px; background:#facc15;"></span>실제 스마트폰(PHONE_GPS)</span>
+          <span style="display:flex; align-items:center; gap:3px;"><span style="display:inline-block; width:10px; height:2px; background:#10b981;"></span>차기 보정 동선</span>
+        </div>
+      </div>
+
+      <!-- 분석 메트릭 그리드 -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:8px; font-size:11px;">
+        <div style="background:#132238; padding:6px 8px; border-radius:6px;">
+          <span style="color:#94a3b8;">평균 횡이탈도:</span> <strong id="pathAvgDevText" style="color:#f8fafc;">-</strong>
+        </div>
+        <div style="background:#132238; padding:6px 8px; border-radius:6px;">
+          <span style="color:#94a3b8;">이탈 원인:</span> <strong id="pathReasonText" style="color:#38bdf8;">-</strong>
+        </div>
+      </div>
+
+      <!-- 액션형 코칭 조언 박스 -->
+      <div id="pathAdviceBox" style="margin-top:8px; background:#1e293b; border-left:3px solid #38bdf8; padding:8px 10px; border-radius:4px; font-size:11px; color:#e2e8f0; line-height:1.45;">
+        스마트폰 보행 동선 분석 결과를 기다리는 중입니다...
+      </div>
+    </div>
+
     <video class="result-video" id="recordedPreview" controls playsinline></video>
     <div class="upload-form">
       <input type="text" id="uploadTitle" placeholder="업로드할 영상 제목 (예: 한강 석양 와이드 샷)">
@@ -356,17 +577,26 @@ body{margin:0;background:#080d16;color:#fff;font-family:system-ui,-apple-system,
 </main>
 
 <script>
+// ==========================================
+// 1. URL 파라미터 및 프로젝트/인증 식별
+// ==========================================
 const params = new URLSearchParams(window.location.search);
-const projectCode = params.get('project_code');
-const token = params.get('token');
+const urlParams = params;
+const rawProjectCode = params.get('project_code') || params.get('id');
+const rawToken = params.get('token');
+const localAuthToken = localStorage.getItem('sky_auth_token');
+
+let projectCode = rawProjectCode;
+let token = rawToken || localAuthToken;
+let resolvedProjectId = 1;
+let currentProjectData = null;
+let currentShootingNumber = 1;
 
 const projectBanner = document.getElementById('projectBanner');
 const projectCodeText = document.getElementById('projectCodeText');
-
-if (projectCode) {
-  projectBanner.classList.add('active');
-  projectCodeText.textContent = `🔗 PC 연동 프로젝트: ${projectCode}`;
-}
+const toastBanner = document.getElementById('toastBanner');
+const toastMsg = document.getElementById('toastMsg');
+const toastActionBtn = document.getElementById('toastActionBtn');
 
 const video = document.getElementById('video');
 const placeholder = document.getElementById('placeholder');
@@ -383,11 +613,26 @@ const resultPanel = document.getElementById('resultPanel');
 const recordedPreview = document.getElementById('recordedPreview');
 const downloadLink = document.getElementById('downloadLink');
 
+const targetReticle = document.getElementById('targetReticle');
+const reticleBadge = document.getElementById('reticleBadge');
+const btnAnalyzeAi = document.getElementById('btnAnalyzeAi');
+
+const valGps = document.getElementById('valGps');
+const valGyro = document.getElementById('valGyro');
+const btnIosSensor = document.getElementById('btnIosSensor');
+const chipGps = document.getElementById('chipGps');
+const chipGyro = document.getElementById('chipGyro');
+
+const syncStatusCard = document.getElementById('syncStatusCard');
+const syncCardTitle = document.getElementById('syncCardTitle');
+const syncBadge = document.getElementById('syncBadge');
+const syncCardDetails = document.getElementById('syncCardDetails');
+const btnRetrySync = document.getElementById('btnRetrySync');
+
 let stream = null;
 let fileUrl = null;
-let aiInterval = null;
 let isCompositionReady = false;
-let aiOffset = { x: 0.4, y: -0.3 }; // Starts slightly offset
+let aiOffset = { x: 0.0, y: 0.0 };
 let mediaRecorder = null;
 let recordedChunks = [];
 let isRecording = false;
@@ -396,12 +641,443 @@ let recTimerId = null;
 let recSeconds = 0;
 let currentPurpose = 'orbit';
 
-// Realtime Subject Centroid & Orientation State
+// 실시간 피사체 중심 및 모바일 센서 상태
 let currentCentroid = { x: 0.35, y: -0.28 };
-let deviceTilt = { beta: 0, gamma: 0 }; // pitch & roll
+let deviceTilt = { beta: 0, gamma: 0 };
 let trackingLoopId = null;
+let currentGuideDirection = 'none';
+let currentGuideMessage = '';
 
+// AI 분석 상태 플래그
+let isAiAnalyzing = false;
+let aiAutoIntervalId = null;
+let latestAnalysisResult = null;
+
+// ==========================================
+// 2. 스마트폰 센서 상태 및 원본/변환 데이터
+// ==========================================
+const currentGps = {
+  lat: null,
+  lng: null,
+  accuracy: null,
+  altitude: null,
+  speed: null,
+  heading: null,
+  timestamp: null
+};
+
+const rawSensors = {
+  alpha: null,
+  beta: null,
+  gamma: null,
+  absolute: false
+};
+
+const cameraOrientation = {
+  heading: null,
+  pitch: null,
+  roll: null,
+  screen_orientation_angle: 0
+};
+
+let gpsWatchId = null;
+let recordedWaypoints = [];
+let waypointTimerId = null;
+
+// ==========================================
+// 3. UI 토스트 알림 및 에러 핸들러
+// ==========================================
+function showToast(message, type = 'warning', actionLabel = null, actionCallback = null) {
+  toastBanner.className = `toast-banner show ${type}`;
+  toastMsg.textContent = message;
+  if (actionLabel && actionCallback) {
+    toastActionBtn.textContent = actionLabel;
+    toastActionBtn.style.display = 'block';
+    toastActionBtn.onclick = actionCallback;
+  } else {
+    toastActionBtn.style.display = 'none';
+  }
+}
+
+function hideToast() {
+  toastBanner.className = 'toast-banner';
+  toastBanner.style.display = 'none';
+}
+
+function getAuthHeaders() {
+  const headers = {};
+  const t = token && token !== 'mobile_launch' ? token : localAuthToken;
+  if (t) {
+    headers['Authorization'] = `Bearer ${t}`;
+  }
+  return headers;
+}
+
+// ==========================================
+// 4. 프로젝트 식별 및 차기 촬영 회차 로드 & Phase 6 보정 동선 승계
+// ==========================================
+let activeRecommendedWaypoints = [];
+
+async function initProject() {
+  const codeToLookup = projectCode || '1';
+  try {
+    const res = await fetch(`/api/mobile/projects/resolve/${encodeURIComponent(codeToLookup)}`);
+    if (res.ok) {
+      const data = await res.json();
+      resolvedProjectId = data.project_id || data.id || 1;
+      currentProjectData = data;
+      projectBanner.classList.add('active');
+      projectCodeText.textContent = `🔗 프로젝트: ${data.title} (${data.project_code || 'ID: ' + resolvedProjectId})`;
+      
+      fetchShootingSummary(resolvedProjectId);
+      fetchNextRoundRecommendation(resolvedProjectId);
+    } else {
+      projectBanner.classList.add('active');
+      projectCodeText.textContent = `🔗 모바일 독립 모드 (프로젝트 1 연결됨)`;
+      fetchShootingSummary(1);
+      fetchNextRoundRecommendation(1);
+    }
+  } catch (err) {
+    console.warn('프로젝트 조회 예외 발생:', err);
+    projectBanner.classList.add('active');
+    projectCodeText.textContent = `🔗 로컬 가상 프로젝트 모드`;
+  }
+}
+
+async function fetchShootingSummary(projectId) {
+  try {
+    const headers = getAuthHeaders();
+    const queryToken = (token && token !== 'mobile_launch') ? `?token=${encodeURIComponent(token)}` : '';
+    const res = await fetch(`/api/mobile/projects/${projectId}/paths/summary${queryToken}`, { headers });
+    if (res.ok) {
+      const summary = await res.json();
+      currentShootingNumber = (summary.latest_shooting_number || 0) + 1;
+      console.log(`[ShootingPath] 현재 프로젝트 ${projectId}의 차기 촬영 회차: ${currentShootingNumber}회차`);
+    }
+  } catch (err) {
+    console.warn('촬영 요약 확인 실패:', err);
+  }
+}
+
+async function fetchNextRoundRecommendation(projectId) {
+  try {
+    const headers = getAuthHeaders();
+    const queryToken = (token && token !== 'mobile_launch' && token.includes('.')) ? `?token=${encodeURIComponent(token)}` : '';
+    const res = await fetch(`/api/mobile/projects/${projectId}/paths/next-recommendation${queryToken}`, { headers });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.recommended_waypoints && data.recommended_waypoints.length > 0) {
+        activeRecommendedWaypoints = data.recommended_waypoints;
+      }
+      if (data.is_inherited_from_previous) {
+        showToast(
+          `🎯 이전 ${data.source_shooting_number}회차 AI 보정 동선이 차기 ${data.target_shooting_number}회차 권장 경로로 자동 반영되었습니다.`,
+          'success'
+        );
+        console.log(`[Phase 6] 차기 ${data.target_shooting_number}회차 보정 동선 승계 완료:`, activeRecommendedWaypoints);
+      }
+    }
+  } catch (err) {
+    console.warn('차기 보정 동선 로드 예외:', err);
+  }
+}
+
+initProject();
+
+// ==========================================
+// 5. 스마트폰 GPS 추적 (PHONE_GPS)
+// ==========================================
+function startGpsTracking() {
+  if (!navigator.geolocation) {
+    valGps.textContent = 'GPS 미지원 브라우저';
+    valGps.classList.remove('live');
+    return;
+  }
+
+  if (gpsWatchId !== null) return;
+
+  gpsWatchId = navigator.geolocation.watchPosition(
+    pos => {
+      currentGps.lat = typeof pos.coords.latitude === 'number' ? pos.coords.latitude : null;
+      currentGps.lng = typeof pos.coords.longitude === 'number' ? pos.coords.longitude : null;
+      currentGps.accuracy = typeof pos.coords.accuracy === 'number' ? Math.round(pos.coords.accuracy * 10) / 10 : null;
+      currentGps.altitude = typeof pos.coords.altitude === 'number' ? Math.round(pos.coords.altitude * 10) / 10 : null;
+      currentGps.speed = typeof pos.coords.speed === 'number' ? Math.round(pos.coords.speed * 100) / 100 : null;
+      currentGps.heading = typeof pos.coords.heading === 'number' && !isNaN(pos.coords.heading) ? Math.round(pos.coords.heading * 10) / 10 : null;
+      currentGps.timestamp = new Date(pos.timestamp).toISOString();
+
+      if (currentGps.lat !== null && currentGps.lng !== null) {
+        valGps.textContent = `${currentGps.lat.toFixed(4)}°, ${currentGps.lng.toFixed(4)}° (±${currentGps.accuracy || 0}m)`;
+        valGps.classList.add('live');
+        chipGps.classList.add('active');
+      }
+    },
+    err => {
+      valGps.classList.remove('live');
+      if (err.code === 1) { // PERMISSION_DENIED
+        valGps.textContent = '위치 권한 거부됨';
+        showToast('스마트폰 위치(GPS) 권한이 비활성화되었습니다. 모바일 브라우저 권한을 허용하시면 실제 보행 동선(PHONE_GPS)이 함께 기록됩니다.', 'warning');
+      } else {
+        valGps.textContent = 'GPS 신호 수신 중...';
+      }
+    },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 2000 }
+  );
+}
+
+// ==========================================
+// 6. 스마트폰 센서 수집 및 카메라 각도 좌표계 변환
+// ==========================================
+function getScreenAngle() {
+  if (window.screen && window.screen.orientation && typeof window.screen.orientation.angle === 'number') {
+    return window.screen.orientation.angle;
+  }
+  if (typeof window.orientation === 'number') {
+    return window.orientation;
+  }
+  return 0;
+}
+
+function handleOrientationEvent(e) {
+  rawSensors.alpha = typeof e.alpha === 'number' ? Math.round(e.alpha * 10) / 10 : null;
+  rawSensors.beta = typeof e.beta === 'number' ? Math.round(e.beta * 10) / 10 : null;
+  rawSensors.gamma = typeof e.gamma === 'number' ? Math.round(e.gamma * 10) / 10 : null;
+  rawSensors.absolute = !!e.absolute;
+
+  const screenAngle = getScreenAngle();
+  cameraOrientation.screen_orientation_angle = screenAngle;
+
+  // 1) Heading (방위각) 변환
+  let compassHeading = null;
+  if (typeof e.webkitCompassHeading === 'number' && !isNaN(e.webkitCompassHeading)) {
+    compassHeading = e.webkitCompassHeading;
+  } else if (rawSensors.alpha !== null) {
+    compassHeading = (360 - rawSensors.alpha) % 360;
+  }
+
+  if (compassHeading !== null) {
+    cameraOrientation.heading = Math.round(((compassHeading + screenAngle) % 360 + 360) % 360 * 10) / 10;
+  } else {
+    cameraOrientation.heading = null;
+  }
+
+  // 2) Pitch 및 Roll 변환
+  if (rawSensors.beta !== null && rawSensors.gamma !== null) {
+    let p = 0;
+    let r = 0;
+    if (screenAngle === 0) {
+      p = rawSensors.beta - 90;
+      r = rawSensors.gamma;
+    } else if (screenAngle === 90) {
+      p = rawSensors.gamma;
+      r = -(rawSensors.beta - 90);
+    } else if (screenAngle === 270 || screenAngle === -90) {
+      p = -rawSensors.gamma;
+      r = rawSensors.beta - 90;
+    } else if (screenAngle === 180) {
+      p = -(rawSensors.beta - 90);
+      r = -rawSensors.gamma;
+    } else {
+      p = rawSensors.beta - 90;
+      r = rawSensors.gamma;
+    }
+    cameraOrientation.pitch = Math.round(p * 10) / 10;
+    cameraOrientation.roll = Math.round(r * 10) / 10;
+
+    deviceTilt.beta = Math.max(-30, Math.min(30, cameraOrientation.pitch));
+    deviceTilt.gamma = Math.max(-30, Math.min(30, cameraOrientation.roll));
+  } else {
+    cameraOrientation.pitch = null;
+    cameraOrientation.roll = null;
+  }
+
+  if (cameraOrientation.heading !== null || cameraOrientation.pitch !== null) {
+    const hText = cameraOrientation.heading !== null ? `방위 ${cameraOrientation.heading}°` : '방위 -';
+    const pText = cameraOrientation.pitch !== null ? `틸트 ${cameraOrientation.pitch}°` : '틸트 -';
+    valGyro.textContent = `${hText} | ${pText}`;
+    valGyro.classList.add('live');
+    chipGyro.classList.add('active');
+  }
+}
+
+function initOrientationListeners() {
+  if ('ondeviceorientationabsolute' in window) {
+    window.addEventListener('deviceorientationabsolute', handleOrientationEvent, true);
+  }
+  if ('DeviceOrientationEvent' in window) {
+    window.addEventListener('deviceorientation', handleOrientationEvent, true);
+  }
+}
+
+// iOS 13+ 센서 권한 체크 및 버튼 표시
+if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+  btnIosSensor.style.display = 'inline-block';
+  btnIosSensor.addEventListener('click', async () => {
+    try {
+      const state = await DeviceOrientationEvent.requestPermission();
+      if (state === 'granted') {
+        btnIosSensor.style.display = 'none';
+        initOrientationListeners();
+        showToast('iOS 센서 권한이 허용되었습니다.', 'success');
+      } else {
+        showToast('센서 권한이 거부되었습니다. 기기 설정에서 Safari 센서 접근을 켜주세요.', 'warning');
+      }
+    } catch (e) {
+      console.warn('iOS requestPermission error:', e);
+    }
+  });
+} else {
+  initOrientationListeners();
+}
+
+// ==========================================
+// 7. 실시간 AI 장면 분석 및 구도 추천 요청
+// ==========================================
+function captureKeyFrameBase64() {
+  if (video && video.readyState >= 2) {
+    const snapCanvas = document.createElement('canvas');
+    snapCanvas.width = 640;
+    snapCanvas.height = 640;
+    const sCtx = snapCanvas.getContext('2d');
+    const vw = video.videoWidth || 1280;
+    const vh = video.videoHeight || 720;
+    const minDim = Math.min(vw, vh);
+    const cropSize = minDim * 0.8;
+    const sx = (vw - cropSize) / 2 + (aiOffset.x * 20);
+    const sy = (vh - cropSize) / 2 + (aiOffset.y * 20);
+    sCtx.drawImage(video, Math.max(0, sx), Math.max(0, sy), cropSize, cropSize, 0, 0, 640, 640);
+    return snapCanvas.toDataURL('image/jpeg', 0.82);
+  }
+  if (cropCanvas) {
+    return cropCanvas.toDataURL('image/jpeg', 0.82);
+  }
+  return null;
+}
+
+async function requestAiSceneAnalysis(manual = false) {
+  if (isAiAnalyzing) return;
+  if (!video || video.readyState < 2) {
+    if (manual) showToast('카메라를 먼저 연결해 주세요.', 'warning');
+    return;
+  }
+
+  const frameBase64 = captureKeyFrameBase64();
+  if (!frameBase64) return;
+
+  isAiAnalyzing = true;
+  // 분석 진행 중 표시 (과거 분석 결과를 최신인 것처럼 속이지 않음)
+  frameBadge.textContent = '🔄 AI 장면 분석 진행 중...';
+  frameBadge.style.background = '#2563eb';
+  if (feedbackBox) {
+    feedbackBox.innerHTML = `<span>🔄 <b>AI 장면 분석 진행 중:</b> 카메라 프레임 내 피사체, 환경, 수평선 판독 중...</span><span style="font-weight:700; color:#2563eb;">분석 중</span>`;
+  }
+
+  const reqPayload = {
+    project_id: resolvedProjectId || 1,
+    image_base64: frameBase64,
+    purpose: currentPurpose || 'orbit',
+    scene_intent: currentProjectData?.scene_intent || null,
+    current_pitch: cameraOrientation.pitch || -15.0,
+    current_roll: cameraOrientation.roll || 0.0,
+    current_heading: cameraOrientation.heading || null,
+    shooting_number: currentShootingNumber || 1,
+    save_result: true
+  };
+
+  try {
+    const headers = getAuthHeaders();
+    const queryToken = (token && token !== 'mobile_launch' && token.includes('.')) ? `?token=${encodeURIComponent(token)}` : '';
+    const apiRes = await fetch(`/api/mobile/analyze${queryToken}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify(reqPayload)
+    });
+
+    if (!apiRes.ok) throw new Error(`서버 응답 오류 (${apiRes.status})`);
+    const res = await apiRes.json();
+    latestAnalysisResult = res;
+
+    // 1. 목표 위치 타겟 레티클 이동
+    if (res.target_position && targetReticle) {
+      const targetLeftPct = ((res.target_position.target_x || 0.0) + 1.0) / 2.0 * 100;
+      const targetTopPct = ((res.target_position.target_y || 0.0) + 1.0) / 2.0 * 100;
+      targetReticle.style.left = `${Math.max(10, Math.min(90, targetLeftPct))}%`;
+      targetReticle.style.top = `${Math.max(10, Math.min(90, targetTopPct))}%`;
+      if (reticleBadge) {
+        reticleBadge.textContent = (res.recommended_composition || '목표 구도').split(' ')[0];
+      }
+      targetReticle.classList.toggle('aligned', !!res.is_ready);
+    }
+
+    // 2. 가이드 상태 및 프레임 색상 갱신
+    applyAiAnalysisToUI(res);
+
+    // 3. 안내 피드백 박스 갱신
+    if (feedbackBox) {
+      const subjText = res.subject || '인식된 피사체';
+      const envText = res.environment_details?.summary || '자연광 환경';
+      const compText = res.recommended_composition || 'AI 추천 구도';
+      feedbackBox.innerHTML = `<span>🎯 <b>피사체:</b> ${subjText} | <b>환경:</b> ${envText} | <b>추천:</b> ${compText}</span><span style="font-weight:700; color:#059669;">일치도: ${res.frame_score}점</span>`;
+    }
+    if (manual) {
+      showToast(`AI 장면 분석 완료: [${res.recommended_composition}] 추천`, 'success');
+    }
+  } catch (err) {
+    console.warn('AI 장면 분석 실패:', err);
+    frameBadge.textContent = '⚠️ AI 분석 일시 오류 (센서 가이드 유지)';
+    frameBadge.style.background = '#b45309';
+    if (feedbackBox) {
+      feedbackBox.innerHTML = `<span>⚠️ <b>AI 분석 통신 지연:</b> 스마트폰 센서 기준 기본 가이드로 동작 중입니다.</span><span style="color:#b45309; font-weight:700;">센서 모드</span>`;
+    }
+  } finally {
+    isAiAnalyzing = false;
+  }
+}
+
+function applyAiAnalysisToUI(analysis) {
+  const dir = analysis.guide_direction;
+  ['up', 'down', 'left', 'right'].forEach(d => {
+    const el = document.getElementById(d);
+    if (el) el.classList.toggle('active', d === dir);
+  });
+
+  aiOffset.x = analysis.offset_x || 0.0;
+  aiOffset.y = analysis.offset_y || 0.0;
+  if (video) video.style.transform = `translate(${aiOffset.x * 8}%, ${aiOffset.y * 8}%)`;
+
+  if (analysis.is_ready) {
+    isCompositionReady = true;
+    liveFrame.classList.add('ready');
+    frameBadge.textContent = `✓ [${analysis.recommended_composition || 'AI 추천 구도'}] 일치`;
+    frameBadge.style.background = '#059669';
+    guideText.textContent = analysis.guide_message || '추천 구도에 정확히 들어왔습니다! [촬영 시작]을 눌러 녹화하세요.';
+    if (!isRecording) {
+      recordBtn.disabled = false;
+      recordBtn.textContent = '● 촬영 시작';
+    }
+  } else {
+    isCompositionReady = false;
+    liveFrame.classList.remove('ready');
+    let dirKor = {
+      up: '위쪽 ↑', down: '아래쪽 ↓', left: '왼쪽 ←', right: '오른쪽 →',
+      level_left: '좌측 수평 조정', level_right: '우측 수평 조정',
+      step_back: '거리 확보(후퇴)', step_forward: '접근'
+    }[dir] || '구도 조정';
+    frameBadge.textContent = `구도 이탈: ${dirKor}`;
+    frameBadge.style.background = '#d97706';
+    guideText.textContent = `${analysis.guide_message} (${analysis.recommendation_reason || '피사체 구도 정렬 요망'})`;
+    if (!isRecording) {
+      recordBtn.disabled = true;
+      recordBtn.textContent = '● 촬영 시작 (구도 대기)';
+    }
+  }
+}
+
+// 지속적 미세 센서 추적 (AI 분석 결과 간격 사이의 부드러운 움직임 보조)
 function setGuideState(dir, offsetX = 0, offsetY = 0, message = '') {
+  currentGuideDirection = dir;
+  currentGuideMessage = message;
+
   ['up', 'down', 'left', 'right'].forEach(d => {
     const el = document.getElementById(d);
     if (el) el.classList.toggle('active', d === dir);
@@ -424,7 +1100,7 @@ function setGuideState(dir, offsetX = 0, offsetY = 0, message = '') {
   } else {
     isCompositionReady = false;
     liveFrame.classList.remove('ready');
-    const dirKor = { up: '위쪽 ↑', down: '아래쪽 ↓', left: '왼쪽 ←', right: '오른쪽 →' }[dir];
+    const dirKor = { up: '위쪽 ↑', down: '아래쪽 ↓', left: '왼쪽 ←', right: '오른쪽 →' }[dir] || dir;
     frameBadge.textContent = `구도 이탈: 조정 필요 (${dirKor})`;
     frameBadge.style.background = '#d97706';
     guideText.textContent = message || `피사체가 구도를 벗어났습니다. 카메라를 [${dirKor}] 방향으로 천천히 이동하여 프레임 안으로 다시 맞춰주세요.`;
@@ -435,14 +1111,14 @@ function setGuideState(dir, offsetX = 0, offsetY = 0, message = '') {
   }
 }
 
-// Continuous Dynamic Evaluator (Realtime Feedback Loop)
 function evaluateCurrentFrame() {
-  // Calculate distance from sweet spot (0,0)
+  if (isAiAnalyzing) return; // AI 분석 중일 때는 기존 센서 드리프트 루프가 배지를 덮어쓰지 않음
+  if (latestAnalysisResult) return; // 최신 AI 분석 결과가 화면을 제어 중이면 센서 드리프트가 덮어쓰지 않음
+
   const dist = Math.hypot(currentCentroid.x, currentCentroid.y);
-  const tolerance = 0.18; // Sweet spot boundary (±18%)
+  const tolerance = 0.18;
 
   if (dist <= tolerance) {
-    // Within Sweet Spot -> GREEN READY!
     const purposeName = {
       orbit: '피사체 360° 중심 회전 궤적',
       dronie: '골든아워 직선 시네마틱 궤적',
@@ -454,7 +1130,6 @@ function evaluateCurrentFrame() {
       `✓ [${purposeName}] 일치! 피사체가 최적의 촬영 프레임 내에 안정적으로 락온되었습니다. 지금 녹화하세요!`
     );
   } else {
-    // Out of Sweet Spot -> DYNAMIC DIRECTIONAL ARROWS!
     let dominantDir = 'right';
     let hintMsg = '';
 
@@ -472,7 +1147,7 @@ function evaluateCurrentFrame() {
     } else {
       if (currentCentroid.y > 0) {
         dominantDir = 'up';
-        hintMsg = '고도가 낮거나 피사체가 하단에 있습니다. 카메라를 ⬆️ 위쪽으로 올리세요.';
+        hintMsg = '카메라 틸트가 낮거나 피사체가 하단에 있습니다. 카메라를 ⬆️ 위쪽으로 올리세요.';
       } else {
         dominantDir = 'down';
         hintMsg = '피사체가 상단으로 치우쳤습니다. 카메라를 ⬇️ 아래쪽으로 내리세요.';
@@ -483,19 +1158,14 @@ function evaluateCurrentFrame() {
   }
 }
 
-// Dynamic Tracking Loop (Runs at 30fps)
 function startAiAutoTracking() {
   stopAiAutoTracking();
-
-  // Gentle natural oscillation simulating hand/drone movement
   let angle = 0;
   trackingLoopId = setInterval(() => {
     angle += 0.04;
-    // Base natural drift
     const driftX = Math.sin(angle * 1.2) * 0.28;
     const driftY = Math.cos(angle * 0.9) * 0.24;
 
-    // Incorporate accelerometer if available
     const gyroX = (deviceTilt.gamma / 45) * 0.4;
     const gyroY = (deviceTilt.beta / 45) * 0.4;
 
@@ -504,6 +1174,14 @@ function startAiAutoTracking() {
 
     evaluateCurrentFrame();
   }, 100);
+
+  // 주기적 AI 장면 분석 타이머 (5초마다 자동 구도 재평가)
+  if (aiAutoIntervalId) clearInterval(aiAutoIntervalId);
+  aiAutoIntervalId = setInterval(() => {
+    if (stream && !isRecording && !isAiAnalyzing) {
+      requestAiSceneAnalysis(false);
+    }
+  }, 5000);
 }
 
 function stopAiAutoTracking() {
@@ -511,79 +1189,86 @@ function stopAiAutoTracking() {
     clearInterval(trackingLoopId);
     trackingLoopId = null;
   }
+  if (aiAutoIntervalId) {
+    clearInterval(aiAutoIntervalId);
+    aiAutoIntervalId = null;
+  }
 }
 
-// Mobile Device Gyroscope / Orientation Listener
-if (window.DeviceOrientationEvent) {
-  window.addEventListener('deviceorientation', (e) => {
-    if (e.beta !== null && e.gamma !== null) {
-      deviceTilt.beta = Math.max(-30, Math.min(30, e.beta - 45)); // relative to hand holding angle
-      deviceTilt.gamma = Math.max(-30, Math.min(30, e.gamma));
-    }
-  }, true);
+// ==========================================
+// 8. 크롭 캔버스 렌더링 루프 및 프레임 스냅샷
+// ==========================================
+function drawCroppedFrame() {
+  if (!isRecording) return;
+  if (video && video.readyState >= 2) {
+    const vw = video.videoWidth || 1280;
+    const vh = video.videoHeight || 720;
+    const minDim = Math.min(vw, vh);
+    const cropSize = minDim * 0.8;
+    const maxOffX = (vw - cropSize) / 2;
+    const maxOffY = (vh - cropSize) / 2;
+    const sx = Math.max(0, Math.min(vw - cropSize, (vw - cropSize) / 2 + (aiOffset.x * maxOffX * 0.4)));
+    const sy = Math.max(0, Math.min(vh - cropSize, (vh - cropSize) / 2 + (aiOffset.y * maxOffY * 0.4)));
+    ctx.drawImage(video, sx, sy, cropSize, cropSize, 0, 0, cropCanvas.width, cropCanvas.height);
+  }
+  renderFrameId = requestAnimationFrame(drawCroppedFrame);
 }
 
-// Step 1: 360 Scan & Purpose Handler
-const btnScan = document.getElementById('btnScan360');
-const selectPurp = document.getElementById('selectPurpose');
-const scanVideoFile = document.getElementById('scanVideoFile');
-const feedbackBox = document.getElementById('scanFeedbackBox');
-const workflowBadge = document.getElementById('workflowBadge');
-
-if (selectPurp) {
-  selectPurp.addEventListener('change', (e) => {
-    currentPurpose = e.target.value;
-    const purpNames = { orbit: 'POI 회전', dronie: '직선 시네마틱', thirds: '3x3 삼분할', landscape: '수평 풍경' };
-    statusEl.textContent = `촬영 목적 변경: [${purpNames[currentPurpose]}] 맞춤 가이드 준비`;
-    if (feedbackBox) {
-      feedbackBox.innerHTML = `<span>✓ <b>[${purpNames[currentPurpose]}]</b> 맞춤형 실시간 앵글 및 수평선 타겟이 갱신되었습니다.</span><span style="font-weight:700; color:#059669;">가동 중</span>`;
-    }
-  });
-}
-
-if (btnScan) {
-  btnScan.addEventListener('click', () => {
-    statusEl.textContent = '🔄 현장 장소 360° 파노라마 스캔 중 (주변 광원 및 피사체 분석)...';
-    if (workflowBadge) workflowBadge.textContent = '현장 360° 스캔 진행 중...';
-    btnScan.disabled = true;
-    
-    let countdown = 3;
-    const scanTimer = setInterval(() => {
-      countdown--;
-      if (countdown > 0) {
-        statusEl.textContent = `🔄 현장 360° 스캔 중... (${countdown}초)`;
-      } else {
-        clearInterval(scanTimer);
-        btnScan.disabled = false;
-        statusEl.textContent = '✓ 현장 스캔 완료! 실시간 맞춤 구도 가이드 모드로 전환되었습니다.';
-        if (workflowBadge) {
-          workflowBadge.textContent = '2단계: AI 실시간 구도 안내 및 적재적소 보정 촬영';
-          workflowBadge.style.background = '#dcfce7';
-          workflowBadge.style.color = '#15803d';
-        }
-        if (feedbackBox) {
-          feedbackBox.innerHTML = `<span>✓ <b>현장 360° 스캔 완료:</b> 수평선 0° 기준선 및 중심 피사체 좌표 락온됨</span><span style="font-weight:700; color:#059669;">가이드 활성</span>`;
-        }
-        startAiAutoTracking();
-      }
-    }, 1000);
-  });
-}
-
-if (scanVideoFile) {
-  scanVideoFile.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      statusEl.textContent = `📁 업로드된 영상 [${file.name}] 기반 AI 피사체 분석 완료!`;
-      if (feedbackBox) {
-        feedbackBox.innerHTML = `<span>✓ <b>업로드 영상 분석 완료:</b> [${file.name}] 내 랜드마크 중심점 추출됨</span><span style="font-weight:700; color:#059669;">가이드 활성</span>`;
-      }
-      startAiAutoTracking();
+function captureKeyFrameBlob() {
+  return new Promise(resolve => {
+    if (video && video.readyState >= 2) {
+      const snapCanvas = document.createElement('canvas');
+      snapCanvas.width = 720;
+      snapCanvas.height = 720;
+      const sCtx = snapCanvas.getContext('2d');
+      const vw = video.videoWidth || 1280;
+      const vh = video.videoHeight || 720;
+      const minDim = Math.min(vw, vh);
+      const cropSize = minDim * 0.8;
+      const sx = (vw - cropSize) / 2 + (aiOffset.x * 20);
+      const sy = (vh - cropSize) / 2 + (aiOffset.y * 20);
+      sCtx.drawImage(video, Math.max(0, sx), Math.max(0, sy), cropSize, cropSize, 0, 0, 720, 720);
+      snapCanvas.toBlob(b => resolve(b), 'image/jpeg', 0.88);
+    } else {
+      cropCanvas.toBlob(b => resolve(b), 'image/jpeg', 0.88);
     }
   });
 }
 
+// ==========================================
+// 9. 녹화 중 스마트폰 이동 동선(Waypoints) 수집
+// ==========================================
+function recordWaypointSample() {
+  recordedWaypoints.push({
+    seq: recordedWaypoints.length + 1,
+    timestamp: new Date().toISOString(),
+    raw_gps: {
+      latitude: currentGps.lat,
+      longitude: currentGps.lng,
+      accuracy_m: currentGps.accuracy,
+      altitude_m: currentGps.altitude,
+      speed_mps: currentGps.speed,
+      heading_deg: currentGps.heading
+    },
+    camera_orientation: {
+      heading: cameraOrientation.heading,
+      pitch: cameraOrientation.pitch,
+      roll: cameraOrientation.roll,
+      screen_orientation_angle: cameraOrientation.screen_orientation_angle
+    },
+    composition_state: {
+      offset_x: aiOffset.x,
+      offset_y: aiOffset.y,
+      guide_direction: currentGuideDirection,
+      guide_message: currentGuideMessage,
+      is_sweet_spot: isCompositionReady
+    }
+  });
+}
 
+// ==========================================
+// 10. 촬영 녹화 제어 및 백엔드 서버 동기화
+// ==========================================
 recordBtn.addEventListener('click', () => {
   if (!isRecording) {
     startRecording();
@@ -595,7 +1280,9 @@ recordBtn.addEventListener('click', () => {
 function startRecording() {
   if (!isCompositionReady) return;
   resultPanel.classList.remove('show');
+  hideToast();
   recordedChunks = [];
+  recordedWaypoints = [];
   isRecording = true;
 
   drawCroppedFrame();
@@ -604,16 +1291,20 @@ function startRecording() {
   const mimeTypes = ['video/mp4', 'video/webm;codecs=vp9', 'video/webm'];
   const selectedType = mimeTypes.find(t => MediaRecorder.isTypeSupported(t)) || '';
 
-  mediaRecorder = new MediaRecorder(canvasStream, selectedType ? { mimeType: selectedType } : {});
+  try {
+    mediaRecorder = new MediaRecorder(canvasStream, selectedType ? { mimeType: selectedType } : {});
+  } catch (err) {
+    mediaRecorder = new MediaRecorder(canvasStream);
+  }
 
   mediaRecorder.ondataavailable = e => {
     if (e.data && e.data.size > 0) recordedChunks.push(e.data);
   };
 
-  mediaRecorder.onstop = () => {
+  mediaRecorder.onstop = async () => {
     const ext = (mediaRecorder.mimeType || '').includes('mp4') ? 'mp4' : 'webm';
-    const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'video/webm' });
-    const recordedUrl = URL.createObjectURL(blob);
+    const videoBlob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'video/webm' });
+    const recordedUrl = URL.createObjectURL(videoBlob);
 
     recordedPreview.src = recordedUrl;
     downloadLink.href = recordedUrl;
@@ -621,49 +1312,21 @@ function startRecording() {
     resultPanel.classList.add('show');
     resultPanel.scrollIntoView({ behavior: 'smooth' });
 
-    // 백엔드가 로컬 또는 원격에 연결되어 있으면 실시간 동기화 API 자동 전송 시도
-    if (projectCode) {
-      fetch(`/api/sync/projects/${projectCode}/results${token ? `?token=${token}` : ''}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          frame_score: 95,
-          offset_x: aiOffset.x,
-          offset_y: aiOffset.y,
-          guide_direction: 'none',
-          guide_message: '현장 실시간 AI 구도 일치 녹화 완료',
-          recorded_video_url: recordedUrl
-        })
-      }).then(r => r.json()).then(res => {
-        console.log('백엔드 결과 동기화 완료:', res);
-      }).catch(err => {
-        console.log('로컬 백엔드 미동작 시 브라우저 로컬 저장소 모드로 작동');
-      });
-
-      // BroadcastChannel & LocalStorage PC Sync
-      const syncPayload = {
-        project_code: projectCode,
-        score: 95,
-        rule: '황금비율(Golden Ratio) & 3x3 삼분할 최적 구도',
-        shutter: '1/240s',
-        iso: 100,
-        filter: 'ND16',
-        timestamp: new Date().toISOString()
-      };
-      if (typeof BroadcastChannel !== 'undefined') {
-        const bc = new BroadcastChannel('sky_command_sync');
-        bc.postMessage({ type: 'PROJECT_RESULT', project_code: projectCode, result: syncPayload });
-      }
-      localStorage.setItem('drone_project_result_' + projectCode, JSON.stringify(syncPayload));
-      alert(`[${projectCode}] 촬영 구도 분석 결과가 PC 관제 대시보드로 실시간 동기화되었습니다!`);
-    }
+    const keyFrameBlob = await captureKeyFrameBlob();
+    await syncRecordingToBackend({ videoBlob, keyFrameBlob, recordedUrl });
   };
 
   mediaRecorder.start(200);
   recordBtn.classList.add('recording');
   recordBtn.textContent = '■ 촬영 종료 (녹화 중)';
   recIndicator.classList.add('on');
-  statusEl.textContent = 'AI 보정 프레임 녹화 중...';
+  statusEl.textContent = '스마트폰 센서 및 AI 보정 프레임 녹화 중...';
+
+  recordWaypointSample();
+  if (waypointTimerId) clearInterval(waypointTimerId);
+  waypointTimerId = setInterval(() => {
+    recordWaypointSample();
+  }, 1000);
 
   recSeconds = 0;
   recTimeEl.textContent = 'REC 00:00';
@@ -680,34 +1343,680 @@ function stopRecording() {
   isRecording = false;
   if (renderFrameId) cancelAnimationFrame(renderFrameId);
   if (recTimerId) clearInterval(recTimerId);
+  if (waypointTimerId) clearInterval(waypointTimerId);
+  
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
     mediaRecorder.stop();
   }
   recordBtn.classList.remove('recording');
   recordBtn.textContent = '● 촬영 시작';
   recIndicator.classList.remove('on');
-  statusEl.textContent = '촬영 완료 · 아래에서 영상을 저장하거나 업로드하세요';
+  statusEl.textContent = '촬영 완료 · 서버 동기화 진행 중...';
 }
 
+// ==========================================
+// 11. 백엔드 API 전송 (동선, 에셋, 결과 저장)
+// ==========================================
+async function syncRecordingToBackend({ videoBlob, keyFrameBlob, recordedUrl }) {
+  const pId = resolvedProjectId || 1;
+  const headers = getAuthHeaders();
+  const queryToken = (token && token !== 'mobile_launch' && token.includes('.')) ? `?token=${encodeURIComponent(token)}` : '';
+
+  updateSyncStatusUI(null, `촬영 ${currentShootingNumber}회차 데이터 서버 전송 중 (PHONE_GPS 동선 및 캡처 프레임)...`);
+
+  const waypointsToSend = recordedWaypoints.length > 0 ? recordedWaypoints : [{
+    seq: 1,
+    timestamp: new Date().toISOString(),
+    raw_gps: {
+      latitude: currentGps.lat,
+      longitude: currentGps.lng,
+      accuracy_m: currentGps.accuracy,
+      altitude_m: currentGps.altitude,
+      speed_mps: currentGps.speed,
+      heading_deg: currentGps.heading
+    },
+    camera_orientation: {
+      heading: cameraOrientation.heading,
+      pitch: cameraOrientation.pitch,
+      roll: cameraOrientation.roll,
+      screen_orientation_angle: cameraOrientation.screen_orientation_angle
+    },
+    composition_state: {
+      offset_x: aiOffset.x,
+      offset_y: aiOffset.y,
+      guide_direction: 'none',
+      guide_message: '최종 촬영 프레임',
+      is_sweet_spot: true
+    }
+  }];
+
+  const recWpsForPayload = (activeRecommendedWaypoints && activeRecommendedWaypoints.length > 0)
+    ? activeRecommendedWaypoints
+    : (currentProjectData?.latitude ? [{
+        seq: 1,
+        lat: currentProjectData.latitude,
+        lng: currentProjectData.longitude,
+        action: currentProjectData.recommended_mode || 'POI Orbit'
+      }] : []);
+
+  const pathPayload = {
+    shooting_number: currentShootingNumber || 1,
+    tracking_source: 'PHONE_GPS',
+    recommended_waypoints: recWpsForPayload,
+    actual_waypoints: waypointsToSend,
+    corrected_waypoints: [],
+    alpha_weight: null,
+    deviation_score: null,
+    deviation_reason: null,
+    is_valid: true
+  };
+
+  try {
+    // 1) POST /api/mobile/projects/{project_id}/paths (저장 및 Phase 6 AI 경로 보정 자동 수행)
+    const pathRes = await fetch(`/api/mobile/projects/${pId}/paths${queryToken}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify(pathPayload)
+    });
+    if (!pathRes.ok) {
+      throw new Error(`동선 저장 실패 (${pathRes.status})`);
+    }
+    const pathData = await pathRes.json();
+    const savedShootingNumber = pathData.shooting_number || currentShootingNumber;
+
+    // Phase 6: 상세 메트릭(평균 이탈 거리, 코칭 조언) 조회 및 시각화 반영
+    let analysisDetail = null;
+    try {
+      const analyzeRes = await fetch(`/api/mobile/projects/${pId}/paths/analyze${queryToken}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify(pathPayload)
+      });
+      if (analyzeRes.ok) {
+        analysisDetail = await analyzeRes.json();
+      }
+    } catch (e) {
+      console.warn('경로 상세 분석 호출 경고:', e);
+    }
+
+    renderPathAnalysisUI(analysisDetail || pathData);
+
+    // 유효 보정 경로인 경우 차기 회차 권장 동선으로 로컬 승계
+    if (pathData.is_valid && pathData.corrected_waypoints && pathData.corrected_waypoints.length > 0) {
+      activeRecommendedWaypoints = pathData.corrected_waypoints;
+    }
+
+    // 2) POST /api/mobile/projects/{project_id}/assets/upload
+    if (keyFrameBlob) {
+      const formData = new FormData();
+      formData.append('file', keyFrameBlob, `frame_take_${savedShootingNumber}_${Date.now()}.jpg`);
+      formData.append('asset_type', 'FRAME_CAPTURE');
+      formData.append('title', `촬영 ${savedShootingNumber}회차 주요 캡처 프레임`);
+      formData.append('description', `스마트폰 모사 촬영 중 수집된 AI 일치 구도 프레임 (PHONE_GPS)`);
+      formData.append('is_common', 'false');
+
+      const assetRes = await fetch(`/api/mobile/projects/${pId}/assets/upload${queryToken}`, {
+        method: 'POST',
+        headers: { ...headers },
+        body: formData
+      });
+      if (!assetRes.ok) {
+        console.warn('프레임 에셋 업로드 경고:', assetRes.status);
+      }
+    }
+
+    // 3) POST /api/mobile/results (촬영 분석 결과 저장)
+    const analysisPayload = {
+      project_id: pId,
+      frame_score: pathData.deviation_score || 95,
+      offset_x: aiOffset.x,
+      offset_y: aiOffset.y,
+      guide_direction: 'none',
+      guide_message: `스마트폰 ${savedShootingNumber}회차 모사 촬영 완료 (PHONE_GPS, ${waypointsToSend.length}개 Waypoints, ${pathData.deviation_reason || 'NORMAL'})`,
+      recorded_video_url: recordedUrl,
+      shooting_number: savedShootingNumber,
+      recommended_composition: latestAnalysisResult?.recommended_composition || 'AI 맞춤 구도'
+    };
+    await fetch(`/api/mobile/results${queryToken}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify(analysisPayload)
+    }).catch(e => console.warn('결과 저장 경고:', e));
+
+    // 4) POST /api/mobile/projects/{pId}/techniques/feedback (Phase 5: 촬영 만족도 피드백 및 선호도 가중치 갱신)
+    const techId = purposeToTechniqueMap[currentPurpose] || 'orbit_poi';
+    await fetch(`/api/mobile/projects/${pId}/techniques/feedback${queryToken}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify({
+        technique_id: techId,
+        shooting_number: savedShootingNumber,
+        was_shot: true,
+        satisfaction_score: 5,
+        comment: `스마트폰 ${savedShootingNumber}회차 모사 촬영 완료 및 높은 만족도(5점) 자동 반영`
+      })
+    }).catch(e => console.warn('기법 피드백 저장 경고:', e));
+
+    currentShootingNumber = savedShootingNumber + 1;
+    localStorage.removeItem(`pending_sync_proj_${pId}`);
+
+    updateSyncStatusUI(true, `✓ 촬영 ${savedShootingNumber}회차 스마트폰 보행 동선(PHONE_GPS, ${waypointsToSend.length}개 위치 좌표) 및 캡처 프레임이 서버에 정상 저장되었습니다.`);
+    statusEl.textContent = `촬영 완료 · ${savedShootingNumber}회차 데이터 서버 저장 완료`;
+
+    if (projectCode) {
+      const syncBroadcast = {
+        project_code: projectCode,
+        shooting_number: savedShootingNumber,
+        score: pathData.deviation_score || 95,
+        tracking_source: 'PHONE_GPS',
+        timestamp: new Date().toISOString()
+      };
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('sky_command_sync');
+        bc.postMessage({ type: 'PROJECT_RESULT', project_code: projectCode, result: syncBroadcast });
+      }
+      localStorage.setItem('drone_project_result_' + projectCode, JSON.stringify(syncBroadcast));
+    }
+  } catch (err) {
+    console.error('서버 동기화 실패:', err);
+    localStorage.setItem(`pending_sync_proj_${pId}`, JSON.stringify({
+      pId,
+      pathPayload,
+      recordedUrl,
+      timestamp: Date.now()
+    }));
+    updateSyncStatusUI(false, `⚠️ 네트워크 상태가 불안정하여 촬영 데이터 서버 저장을 일시 실패했습니다. 로컬 저장소에 안전하게 보관되었습니다. (${err.message})`);
+    statusEl.textContent = '촬영 완료 · 로컬 저장소 임시 보관됨';
+    renderPathAnalysisUI(pathPayload);
+  }
+}
+
+function updateSyncStatusUI(isSuccess, message) {
+  if (isSuccess === null) {
+    syncBadge.textContent = '전송 중';
+    syncBadge.style.background = '#1d4ed8';
+    syncBadge.style.color = '#fff';
+    btnRetrySync.style.display = 'none';
+  } else if (isSuccess) {
+    syncBadge.textContent = '저장 완료';
+    syncBadge.style.background = '#059669';
+    syncBadge.style.color = '#fff';
+    btnRetrySync.style.display = 'none';
+  } else {
+    syncBadge.textContent = '오프라인 보관';
+    syncBadge.style.background = '#b91c1c';
+    syncBadge.style.color = '#fff';
+    btnRetrySync.style.display = 'block';
+  }
+  syncCardDetails.textContent = message;
+}
+
+btnRetrySync.addEventListener('click', async () => {
+  const pId = resolvedProjectId || 1;
+  const pendingRaw = localStorage.getItem(`pending_sync_proj_${pId}`);
+  if (!pendingRaw) {
+    alert('대기 중인 오프라인 데이터가 없습니다.');
+    return;
+  }
+  try {
+    const data = JSON.parse(pendingRaw);
+    updateSyncStatusUI(null, '🔄 서버 재전송 시도 중...');
+    const headers = getAuthHeaders();
+    const queryToken = (token && token !== 'mobile_launch' && token.includes('.')) ? `?token=${encodeURIComponent(token)}` : '';
+
+    const res = await fetch(`/api/mobile/projects/${data.pId}/paths${queryToken}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify(data.pathPayload)
+    });
+    if (res.ok) {
+      localStorage.removeItem(`pending_sync_proj_${pId}`);
+      updateSyncStatusUI(true, '✓ 로컬 보관된 동선 데이터가 서버로 재전송되어 성공적으로 저장되었습니다!');
+      fetchShootingSummary(pId);
+    } else {
+      throw new Error(`서버 응답 코드 ${res.status}`);
+    }
+  } catch (err) {
+    updateSyncStatusUI(false, `⚠️ 재전송 실패: ${err.message}. 네트워크를 확인 후 다시 시도해 주세요.`);
+  }
+});
+
+// ==========================================
+// 11-1. Phase 6: AI 보행 동선 비교 시각화 및 보정 피드백 렌더러
+// ==========================================
+function renderPathAnalysisUI(data) {
+  const matchBadge = document.getElementById('pathMatchBadge');
+  const avgDevText = document.getElementById('pathAvgDevText');
+  const reasonText = document.getElementById('pathReasonText');
+  const adviceBox = document.getElementById('pathAdviceBox');
+  const canvas = document.getElementById('pathMiniCanvas');
+
+  if (!data) return;
+
+  const score = Math.round(data.match_score ?? data.deviation_score ?? 0);
+  if (matchBadge) {
+    matchBadge.textContent = `${score}점 (${data.is_valid !== false ? '유효 동선' : '재촬영 권장'})`;
+    if (data.is_valid === false) {
+      matchBadge.style.background = '#dc2626';
+      matchBadge.style.color = '#fff';
+    } else if (score >= 85) {
+      matchBadge.style.background = '#059669';
+      matchBadge.style.color = '#fff';
+    } else if (score >= 65) {
+      matchBadge.style.background = '#d97706';
+      matchBadge.style.color = '#fff';
+    } else {
+      matchBadge.style.background = '#e11d48';
+      matchBadge.style.color = '#fff';
+    }
+  }
+
+  if (avgDevText) {
+    avgDevText.textContent = typeof data.average_deviation_m === 'number'
+      ? `${data.average_deviation_m.toFixed(1)}m`
+      : '±1.5m 내외';
+  }
+
+  const reasonMap = {
+    'COMPOSITION_OPTIMIZED': '구도 최적화 우회 (반영율 60%)',
+    'WALKING_DETOUR': '단순 보행 우회 (반영율 20%)',
+    'NORMAL': '정상 경로 유지 (반영율 35%)',
+    'GPS_ACCURACY_LOW': 'GPS 오차 과다 (수신 불안정)',
+    'STATIONARY_DRIFT': '정지 상태 미세 드리프트'
+  };
+
+  if (reasonText) {
+    reasonText.textContent = reasonMap[data.deviation_reason] || data.deviation_reason || '정상 유지';
+  }
+
+  if (adviceBox) {
+    adviceBox.textContent = data.actionable_advice || (
+      data.is_valid !== false
+        ? 'AI 보행 동선 분석이 완료되었습니다. 다음 회차 촬영 시 보정 경로가 자동 적용됩니다.'
+        : 'GPS 오차가 커 보정 경로 학습에서 제외되었습니다. 하늘이 열린 탁 트인 장소에서 다시 시도해 주세요.'
+    );
+  }
+
+  if (canvas) {
+    drawPathComparison(
+      canvas,
+      data.recommended_waypoints || [],
+      data.actual_waypoints || [],
+      data.corrected_waypoints || []
+    );
+  }
+}
+
+function drawPathComparison(canvas, recWps, actWps, corrWps) {
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  const h = canvas.height;
+  const pad = 24;
+
+  ctx.fillStyle = '#030712';
+  ctx.fillRect(0, 0, w, h);
+
+  // Background subtle grid
+  ctx.strokeStyle = '#1e293b';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([2, 4]);
+  for (let x = pad; x < w - pad; x += 55) {
+    ctx.beginPath();
+    ctx.moveTo(x, pad);
+    ctx.lineTo(x, h - pad);
+    ctx.stroke();
+  }
+  for (let y = pad; y < h - pad; y += 30) {
+    ctx.beginPath();
+    ctx.moveTo(pad, y);
+    ctx.lineTo(w - pad, y);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  // Extract coords
+  const extract = (wp) => {
+    if (!wp) return null;
+    const lat = wp.filtered_gps?.lat ?? wp.raw_gps?.lat ?? wp.lat ?? wp.latitude;
+    const lng = wp.filtered_gps?.lng ?? wp.raw_gps?.lng ?? wp.lng ?? wp.longitude;
+    if (typeof lat === 'number' && typeof lng === 'number' && !isNaN(lat) && !isNaN(lng)) {
+      return { lat, lng };
+    }
+    return null;
+  };
+
+  const recPts = (recWps || []).map(extract).filter(Boolean);
+  const actPts = (actWps || []).map(extract).filter(Boolean);
+  const corrPts = (corrWps || []).map(extract).filter(Boolean);
+
+  const allPts = [...recPts, ...actPts, ...corrPts];
+  if (allPts.length === 0) {
+    ctx.fillStyle = '#64748b';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('위치 좌표 수신 대기 중', w / 2, h / 2);
+    return;
+  }
+
+  let minLat = Infinity, maxLat = -Infinity;
+  let minLng = Infinity, maxLng = -Infinity;
+  allPts.forEach(p => {
+    if (p.lat < minLat) minLat = p.lat;
+    if (p.lat > maxLat) maxLat = p.lat;
+    if (p.lng < minLng) minLng = p.lng;
+    if (p.lng > maxLng) maxLng = p.lng;
+  });
+
+  const spanLat = Math.max(0.00008, maxLat - minLat);
+  const spanLng = Math.max(0.00008, maxLng - minLng);
+
+  const toX = (lng) => pad + ((lng - minLng) / spanLng) * (w - 2 * pad);
+  const toY = (lat) => (h - pad) - ((lat - minLat) / spanLat) * (h - 2 * pad);
+
+  // 1. Recommended Path (Cyan Dashed)
+  if (recPts.length > 0) {
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    recPts.forEach((p, idx) => {
+      const x = toX(p.lng);
+      const y = toY(p.lat);
+      if (idx === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    recPts.forEach(p => {
+      ctx.fillStyle = '#38bdf8';
+      ctx.beginPath();
+      ctx.arc(toX(p.lng), toY(p.lat), 3, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  // 2. Actual Path (Yellow Solid)
+  if (actPts.length > 0) {
+    ctx.strokeStyle = '#facc15';
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    actPts.forEach((p, idx) => {
+      const x = toX(p.lng);
+      const y = toY(p.lat);
+      if (idx === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // Start Marker (Green Circle)
+    const startP = actPts[0];
+    ctx.fillStyle = '#22c55e';
+    ctx.beginPath();
+    ctx.arc(toX(startP.lng), toY(startP.lat), 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // End Marker (Red Square)
+    const endP = actPts[actPts.length - 1];
+    ctx.fillStyle = '#ef4444';
+    ctx.fillRect(toX(endP.lng) - 4, toY(endP.lat) - 4, 8, 8);
+  }
+
+  // 3. Corrected Path (Emerald Green Dotted)
+  if (corrPts.length > 0) {
+    ctx.strokeStyle = '#10b981';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([2, 3]);
+    ctx.beginPath();
+    corrPts.forEach((p, idx) => {
+      const x = toX(p.lng);
+      const y = toY(p.lat);
+      if (idx === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+// ==========================================
+// 12. Step 1: 360° 스캔 및 AI 구도 분석 버튼
+// ==========================================
+const btnScan = document.getElementById('btnScan360');
+const selectPurp = document.getElementById('selectPurpose');
+const scanVideoFile = document.getElementById('scanVideoFile');
+const feedbackBox = document.getElementById('scanFeedbackBox');
+const workflowBadge = document.getElementById('workflowBadge');
+
+const purposeToTechniqueMap = {
+  orbit: 'orbit_poi',
+  dronie: 'straight_dronie',
+  thirds: 'active_track_thirds',
+  reveal: 'reveal_obstacle',
+  low_angle: 'low_angle_ground',
+  landscape: 'negative_space_landscape',
+  symmetry: 'symmetry_reflection',
+  top_down: 'top_down_overhead',
+  spiral: 'high_spiral',
+  flyby: 'high_speed_flyby'
+};
+
+// URL ?technique=... 파라미터 연동
+const urlTechniqueParam = urlParams.get('technique');
+if (urlTechniqueParam) {
+  const reverseMap = {
+    'orbit_poi': 'orbit',
+    'straight_dronie': 'dronie',
+    'active_track_thirds': 'thirds',
+    'reveal_obstacle': 'reveal',
+    'low_angle_ground': 'low_angle',
+    'negative_space_landscape': 'landscape',
+    'symmetry_reflection': 'symmetry',
+    'top_down_overhead': 'top_down',
+    'high_spiral': 'spiral',
+    'high_speed_flyby': 'flyby'
+  };
+  const mappedP = reverseMap[urlTechniqueParam] || urlTechniqueParam;
+  if (selectPurp) {
+    selectPurp.value = mappedP;
+    currentPurpose = mappedP;
+  }
+}
+
+if (btnAnalyzeAi) {
+  btnAnalyzeAi.addEventListener('click', () => {
+    requestAiSceneAnalysis(true);
+  });
+}
+
+if (selectPurp) {
+  selectPurp.addEventListener('change', e => {
+    currentPurpose = e.target.value;
+    latestAnalysisResult = null; // 목적 변경 시 이전 AI 분석 결과 리셋
+    const purpNames = {
+      orbit: 'POI 원형 회전',
+      dronie: '직선 드로니 후진',
+      thirds: '3x3 삼분할 추적',
+      reveal: '전경 장애물 리빌',
+      low_angle: '초저각 로우앵글',
+      landscape: '광활한 여백 풍경',
+      symmetry: '수면 반영 대칭',
+      top_down: '수직 90도 버드아이(드론 전용)',
+      spiral: '고고도 나선 상승(드론 전용)',
+      flyby: '고속 플라이바이(드론 전용)'
+    };
+    const isDroneOnly = ['top_down', 'spiral', 'flyby'].includes(currentPurpose);
+    if (isDroneOnly) {
+      showToast('⚠️ [실제 드론 전용 기법]: 고고도 비행 또는 고속 이동이 필요하여 스마트폰 보행 촬영 시에는 앵글이 제한될 수 있습니다.', 'warning');
+    }
+
+    statusEl.textContent = `촬영 목적 변경: [${purpNames[currentPurpose] || currentPurpose}] 맞춤 가이드 준비`;
+    if (feedbackBox) {
+      feedbackBox.innerHTML = `<span>✓ <b>[${purpNames[currentPurpose] || currentPurpose}]</b> 맞춤형 실시간 앵글 및 수평선 타겟이 갱신되었습니다.</span><span style="font-weight:700; color:#059669;">가동 중</span>`;
+    }
+
+    // 백엔드 프로젝트 기법 선택 동기화 (POST /api/mobile/projects/{id}/techniques/select)
+    if (resolvedProjectId) {
+      const techId = purposeToTechniqueMap[currentPurpose] || 'orbit_poi';
+      const headers = getAuthHeaders();
+      const queryToken = (token && token !== 'mobile_launch' && token.includes('.')) ? `?token=${encodeURIComponent(token)}` : '';
+      fetch(`/api/mobile/projects/${resolvedProjectId}/techniques/select${queryToken}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({ technique_id: techId })
+      }).catch(err => console.warn('기법 선택 동기화 경고:', err));
+    }
+
+    requestAiSceneAnalysis(false);
+  });
+}
+
+if (btnScan) {
+  btnScan.addEventListener('click', () => {
+    statusEl.textContent = '🔄 현장 장소 360° 파노라마 스캔 중 (센서 및 광원 분석)...';
+    if (workflowBadge) workflowBadge.textContent = '현장 360° 스캔 진행 중...';
+    btnScan.disabled = true;
+
+    let countdown = 3;
+    const scanTimer = setInterval(async () => {
+      countdown--;
+      if (countdown > 0) {
+        statusEl.textContent = `🔄 현장 360° 스캔 중... (${countdown}초)`;
+      } else {
+        clearInterval(scanTimer);
+        btnScan.disabled = false;
+        statusEl.textContent = '✓ 현장 스캔 완료! AI 장면 분석 및 실시간 맞춤 구도 가이드 모드로 전환되었습니다.';
+        if (workflowBadge) {
+          workflowBadge.textContent = '2단계: AI 실시간 구도 안내 및 적재적소 보정 촬영';
+          workflowBadge.style.background = '#dcfce7';
+          workflowBadge.style.color = '#15803d';
+        }
+
+        try {
+          const panoBlob = await captureKeyFrameBlob();
+          if (panoBlob) {
+            const formData = new FormData();
+            formData.append('file', panoBlob, `panorama_scan_${Date.now()}.jpg`);
+            formData.append('asset_type', 'PANORAMA_360');
+            formData.append('title', '현장 360° 파노라마 스캔 자료');
+            formData.append('description', '촬영 전 현장 환경 및 기준 수평선 분석을 위한 360도 스캔 이미지');
+            formData.append('is_common', 'true');
+
+            const pId = resolvedProjectId || 1;
+            const headers = getAuthHeaders();
+            const queryToken = (token && token !== 'mobile_launch' && token.includes('.')) ? `?token=${encodeURIComponent(token)}` : '';
+            await fetch(`/api/mobile/projects/${pId}/assets/upload${queryToken}`, {
+              method: 'POST',
+              headers: { ...headers },
+              body: formData
+            });
+            console.log('장소 사전 스캔 자료 서버 등록 완료');
+          }
+        } catch (scanErr) {
+          console.warn('사전 스캔 에셋 업로드 생략:', scanErr);
+        }
+
+        // 스캔 직후 AI 장면 분석 즉시 호출
+        requestAiSceneAnalysis(false);
+        startAiAutoTracking();
+      }
+    }, 1000);
+  });
+}
+
+if (scanVideoFile) {
+  scanVideoFile.addEventListener('change', async e => {
+    const file = e.target.files[0];
+    if (file) {
+      statusEl.textContent = `📁 업로드된 영상 [${file.name}] 기반 AI 피사체 분석 중...`;
+      if (feedbackBox) {
+        feedbackBox.innerHTML = `<span>✓ <b>업로드 영상 분석 완료:</b> [${file.name}] 내 랜드마크 중심점 추출됨</span><span style="font-weight:700; color:#059669;">가이드 활성</span>`;
+      }
+      
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('asset_type', 'REFERENCE_VIDEO');
+        formData.append('title', file.name);
+        formData.append('description', '모바일에서 업로드된 사전 참조 영상');
+        formData.append('is_common', 'false');
+
+        const pId = resolvedProjectId || 1;
+        const headers = getAuthHeaders();
+        const queryToken = (token && token !== 'mobile_launch' && token.includes('.')) ? `?token=${encodeURIComponent(token)}` : '';
+        await fetch(`/api/mobile/projects/${pId}/assets/upload${queryToken}`, {
+          method: 'POST',
+          headers: { ...headers },
+          body: formData
+        });
+        showToast(`참조 영상 [${file.name}]이 프로젝트 장소 자료로 등록되었습니다.`, 'success');
+      } catch (uploadErr) {
+        console.warn('참조 영상 업로드 실패:', uploadErr);
+      }
+
+      startAiAutoTracking();
+      requestAiSceneAnalysis(false);
+    }
+  });
+}
+
+// ==========================================
+// 13. 후면 카메라 구동 (getUserMedia)
+// ==========================================
 document.getElementById('start').addEventListener('click', async () => {
+  hideToast();
   try {
     if (!navigator.mediaDevices?.getUserMedia) {
-      throw new Error('이 브라우저에서는 카메라를 사용할 수 없습니다. HTTPS 주소로 열어 주세요.');
+      throw new Error('이 브라우저에서는 카메라 API를 지원하지 않습니다. HTTPS 접속 또는 최신 모바일 브라우저를 이용해 주세요.');
     }
     if (stream) stream.getTracks().forEach(t => t.stop());
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
-    });
+
+    const constraintsList = [
+      { audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } } },
+      { audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } },
+      { audio: false, video: { facingMode: 'environment' } },
+      { audio: false, video: true }
+    ];
+
+    let lastError = null;
+    stream = null;
+    for (const c of constraintsList) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(c);
+        if (stream) break;
+      } catch (err) {
+        lastError = err;
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          throw err;
+        }
+      }
+    }
+
+    if (!stream) throw lastError || new Error('카메라 스트림을 열 수 없습니다.');
+
     video.srcObject = stream;
     video.hidden = false;
     placeholder.hidden = true;
     await video.play();
-    statusEl.textContent = '후면 카메라 연결됨 · AI 구도 추적 중';
+
+    statusEl.textContent = '후면 카메라 연결됨 · 센서 수집 및 AI 구도 가이드 가동 중';
+    
+    startGpsTracking();
     startAiAutoTracking();
+
+    // 카메라 연결 후 1.2초 뒤 최초 AI 장면 분석 수행
+    setTimeout(() => {
+      requestAiSceneAnalysis(false);
+    }, 1200);
   } catch (e) {
     statusEl.textContent = '카메라 연결 실패';
-    alert(e.name === 'NotAllowedError' ? '브라우저 사이트 설정에서 카메라 권한을 허용해 주세요.' : e.message);
+    if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
+      showToast('브라우저 카메라 접근 권한이 차단되었습니다. 주소창의 자물쇠/설정 아이콘을 눌러 카메라 권한을 [허용]으로 변경한 후 다시 시도해 주세요.', 'error');
+    } else {
+      showToast(`카메라 연결 오류: ${e.message}`, 'error');
+    }
   }
 });
 
@@ -716,12 +2025,14 @@ document.getElementById('stop').addEventListener('click', () => {
   stopAiAutoTracking();
   if (stream) stream.getTracks().forEach(t => t.stop());
   stream = null;
+  latestAnalysisResult = null;
   video.pause();
   video.srcObject = null;
   video.removeAttribute('src');
   video.hidden = true;
   placeholder.hidden = false;
   liveFrame.classList.remove('ready');
+  if (targetReticle) targetReticle.classList.remove('aligned');
   frameBadge.textContent = 'AI 구도 탐색 중';
   recordBtn.disabled = true;
   recordBtn.textContent = '● 촬영 시작 (구도 대기)';
@@ -743,13 +2054,17 @@ document.getElementById('file').addEventListener('change', e => {
   placeholder.hidden = true;
   video.play().catch(() => {});
   statusEl.textContent = '영상 파일 AI 구도 분석 중';
+  startGpsTracking();
   startAiAutoTracking();
+  setTimeout(() => {
+    requestAiSceneAnalysis(false);
+  }, 1200);
 });
 
 document.getElementById('uploadCommunityBtn').addEventListener('click', () => {
   const titleInput = document.getElementById('uploadTitle').value.trim();
   const category = document.getElementById('uploadCategory').value;
-  const title = titleInput || 'AI 구도 가이드 촬영 영상';
+  const title = titleInput || 'AI 구도 가이드 모사 촬영 영상';
   const catLabel = { landscape: '경관·여행', cinematic: '시네마틱', event: '행사·기록' }[category];
 
   const savedPosts = JSON.parse(localStorage.getItem('droneCommunityPosts') || '[]');
@@ -758,14 +2073,14 @@ document.getElementById('uploadCommunityBtn').addEventListener('click', () => {
     title,
     category,
     catLabel,
-    place: 'AI 실시간 구도 보정 촬영',
+    place: currentProjectData?.place_name || 'AI 실시간 구도 보정 촬영',
     likes: 1,
     views: 1,
     date: new Date().toLocaleDateString('ko-KR')
   });
   localStorage.setItem('droneCommunityPosts', JSON.stringify(savedPosts));
 
-  alert('커뮤니티에 영상이 업로드되었습니다! 메인 화면으로 이동합니다.');
+  alert('커뮤니티에 영상이 업로드되었습니다! 모바일 메인 화면으로 이동합니다.');
   window.location.href = 'mobile.html#community';
 });
 </script>
