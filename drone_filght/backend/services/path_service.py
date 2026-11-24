@@ -471,11 +471,14 @@ class ShootingPathService:
     def get_next_round_recommendation(
         self,
         db: Session,
-        project_id: int
+        project_id: int,
+        user_id: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         동일 프로젝트의 이전 유효 촬영 기록(ShootingPath)을 조회하여
         이전 보정 경로(corrected_waypoints)를 다음 회차의 권장 경로로 승계 반환
+        Phase 8: 프로젝트 공통 학습 경로(ProjectCommonPath) 반영
+        Phase 9: 사용자별 맞춤 변형 경로(PersonalizedShootingPath) 최우선 승계
         """
         project = db.query(ShootingProject).filter(ShootingProject.id == project_id).first()
         if not project:
@@ -493,15 +496,61 @@ class ShootingPathService:
 
         next_number = (latest_any_path.shooting_number + 1) if latest_any_path else 1
 
-        # 이전 유효 보정 경로가 존재하는 경우 승계
-        if latest_valid_path and latest_valid_path.corrected_waypoints:
+        # Phase 8: 프로젝트에 학습된 활성 공통 경로(ProjectCommonPath)가 있는지 확인
+        from backend.models.models import ProjectCommonPath, PersonalizedShootingPath
+        active_common = db.query(ProjectCommonPath).filter(
+            ProjectCommonPath.project_id == project_id,
+            ProjectCommonPath.is_active == True
+        ).order_by(ProjectCommonPath.version.desc()).first()
+
+        # Phase 9: 사용자의 활성 개인화 맞춤 변형 경로가 있는지 확인
+        pers_path = None
+        if user_id:
+            pers_path = db.query(PersonalizedShootingPath).filter(
+                PersonalizedShootingPath.project_id == project_id,
+                PersonalizedShootingPath.user_id == user_id,
+                PersonalizedShootingPath.is_active == True
+            ).order_by(PersonalizedShootingPath.created_at.desc()).first()
+
+        # Staleness 판정: 공통 경로 최신 버전과 개인화 경로의 base_common_version 비교
+        is_pers_stale = False
+        if pers_path and active_common:
+            if pers_path.base_common_version < active_common.version:
+                is_pers_stale = True
+
+        pers_var_type = None
+        is_personalized = False
+
+        # 1) Phase 9: 사용자 개인별 맞춤 변형 경로가 존재하고 최신 공통 버전과 일치하는 경우 최우선 제공
+        if pers_path and pers_path.personalized_waypoints and not is_pers_stale:
+            recs = pers_path.personalized_waypoints
+            is_inherited = True
+            is_personalized = True
+            pers_var_type = pers_path.variation_type
+            source_info = f"사용자 맞춤형 [{pers_path.variation_type}] 변형 동선(공통 v{pers_path.base_common_version} 기반)이 적용되었습니다."
+            prev_deviation = None
+            prev_reason = f"PERSONALIZED_{pers_path.variation_type}"
+        # 2) Phase 8: 다중 사용자 공통 학습 경로가 존재하는 경우 (개인화 경로가 없거나 노후화되어 최신 공통 경로로 Fallback하는 경우)
+        elif active_common and active_common.common_waypoints:
+            recs = active_common.common_waypoints
+            is_inherited = True
+            is_personalized = False
+            pers_var_type = None
+            if is_pers_stale:
+                source_info = f"기존 개인 맞춤 동선(v{pers_path.base_common_version} 기반)이 노후화되어 최신 v{active_common.version} 공통 권장 동선으로 대체 제공합니다. 맞춤 동선을 재단장해 주세요."
+            else:
+                source_info = f"프로젝트 참여자 {active_common.contributor_count}명의 우수 경로({active_common.total_paths_used}건)를 학습한 최신 v{active_common.version} 공통 권장 동선입니다."
+            prev_deviation = active_common.average_deviation_m
+            prev_reason = f"COLLABORATIVE_V{active_common.version}"
+        # 3) Phase 6: 이전 개인 유효 보정 경로가 존재하는 경우 승계
+        elif latest_valid_path and latest_valid_path.corrected_waypoints:
             recs = latest_valid_path.corrected_waypoints
             is_inherited = True
             source_info = f"이전 {latest_valid_path.shooting_number}회차의 AI 보정 동선을 차기 {next_number}회차 권장 경로로 승계했습니다."
             prev_deviation = latest_valid_path.deviation_score
             prev_reason = latest_valid_path.deviation_reason
         else:
-            # 신규 사용자이거나 유효 보정 기록이 없는 경우: 기본 프로젝트 템플릿 유지
+            # 4) 초기 신규 사용자이거나 유효 기록이 없는 경우: 기본 프로젝트 템플릿 유지
             ref_lat = project.latitude or 37.5284
             ref_lon = project.longitude or 126.9328
             mode_name = project.recommended_mode or "POI Orbit"
@@ -521,6 +570,9 @@ class ShootingPathService:
             "source_shooting_number": latest_valid_path.shooting_number if latest_valid_path else None,
             "previous_deviation_score": prev_deviation,
             "previous_deviation_reason": prev_reason,
+            "common_path_version": active_common.version if active_common else None,
+            "personalized_variation_type": pers_var_type,
+            "is_personalized": is_personalized,
             "recommended_waypoints": recs
         }
 

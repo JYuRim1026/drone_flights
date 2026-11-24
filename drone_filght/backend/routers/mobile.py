@@ -28,10 +28,19 @@ from backend.schemas.schemas import (
     TechniqueFeedbackRequest,
     TechniqueFeedbackResponse,
     PathAnalysisDetailResponse,
-    NextRoundPathResponse
+    NextRoundPathResponse,
+    ProjectCommonPathResponse,
+    CommonPathLearnRequest,
+    CommonPathLearnResponse,
+    CommonPathHistoryResponse,
+    PersonalizedPathGenerateRequest,
+    PersonalizedShootingPathResponse,
+    PersonalizedPathComparisonResponse
 )
 from backend.services.mobile_service import mobile_service, UPLOAD_DIR
 from backend.services.ai_service import ai_service
+from backend.services.collaborative_path_service import collaborative_path_service
+from backend.services.personalized_path_service import personalized_path_service
 from backend.services.auth_service import auth_service, get_current_user, get_optional_current_user
 
 router = APIRouter(prefix="/mobile", tags=["Mobile API (C, D Data)"])
@@ -106,32 +115,45 @@ def create_mobile_project(
 @router.post("/analyze", response_model=AnalyzeResponse, summary="카메라 촬영 장면 실시간 분석 및 AI 구도 추천 [D 영역]")
 def analyze_frame(
     req: AnalyzeRequest,
+    token: Optional[str] = Query(None, description="모바일 QR 접속 보안 토큰"),
     current_user: Optional[User] = Depends(get_optional_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    [Phase 4] 스마트폰 후면 카메라 및 센서 데이터 기반 AI 장면 분석 및 구도 추천:
+    [Phase 10] 스마트폰 후면 카메라 및 센서 데이터 기반 AI 종합 장면 분석 및 촬영/보행 방향 추천:
+    - 4가지 데이터 결합: 프로젝트 정보, 장소 자료, 경로 동선(Phase 8/9), 사용자 선호도(Phase 5)
     - Gemini API 멀티모달 분석 (키 미설정/실패 시 컴퓨터 비전 규칙 엔진 자동 전환)
-    - 주요 피사체 탐지 (사람, 건물, 자연, 차량 등) 및 화면 내 위치/점유율
-    - 배경 및 조도/수평선 특징 분석
-    - 촬영 목적(orbit, dronie, thirds, landscape 등) 맞춤 구도 추천 및 보정 방향(↑↓←→, 수평) 안내
+    - 촬영 방향(Shooting Guide: 상하좌우/수평) vs 보행 이동(Walking Guide: GPS 방위각/거리) 분리 산출
+    - 초록색 프레임(.live.ready) 활성화 조건: 구도 및 수평도 일치 시 즉시 활성화 (보행 도달 여부와 독립)
     - 분석 결과 DB(shooting_analyses) 저장 (사용자 ID 및 회차 연계)
     """
-    if req.image_base64:
-        return ai_service.analyze_scene_and_recommend(
-            image_base64=req.image_base64,
-            scene_intent=req.scene_intent,
-            purpose=req.purpose or "orbit",
-            current_pitch=req.current_pitch or -15.0,
-            current_roll=req.current_roll or 0.0,
-            current_heading=req.current_heading,
-            project_id=req.project_id or 1,
-            shooting_number=req.shooting_number or 1,
-            current_user=current_user,
-            save_to_db=req.save_result if req.save_result is not None else True,
-            db=db
-        )
-    return mobile_service.analyze_camera_frame(req)
+    # 프로젝트 소유권 / 보안 검증 (토큰 또는 사용자 지정 시)
+    if req.project_id and (token or current_user):
+        try:
+            auth_service.verify_project_ownership(db, str(req.project_id), current_user, _clean_token(token))
+        except Exception:
+            # QR 토큰이 mobile_launch 임시 토큰이거나 공개 데모 프로젝트일 경우 유연 처리
+            pass
+
+    return ai_service.analyze_scene_and_recommend(
+        image_base64=req.image_base64,
+        scene_intent=req.scene_intent,
+        purpose=req.purpose or "orbit",
+        current_pitch=req.current_pitch or -15.0,
+        current_roll=req.current_roll or 0.0,
+        current_heading=req.current_heading,
+        current_lat=req.current_lat,
+        current_lng=req.current_lng,
+        current_accuracy=req.current_accuracy,
+        current_timestamp=req.current_timestamp,
+        consecutive_arrival_count=req.consecutive_arrival_count or 0,
+        current_waypoint_seq=req.current_waypoint_seq,
+        project_id=req.project_id or 1,
+        shooting_number=req.shooting_number or 1,
+        current_user=current_user,
+        save_to_db=req.save_result if req.save_result is not None else True,
+        db=db
+    )
 
 
 @router.get("/recommendations/{id}", response_model=RecommendationResponse, summary="추천 구도 및 조종 가이드 조회 [D 영역]")
@@ -370,7 +392,8 @@ def get_next_round_path_recommendation(
     - 신규 사용자이거나 유효 이력이 없는 경우, 기본 프로젝트 기획 템플릿 제공
     """
     auth_service.verify_project_ownership(db, str(project_id), current_user, _clean_token(token))
-    res = mobile_service.get_next_round_path_recommendation(db, project_id)
+    uid = current_user.id if current_user else None
+    res = mobile_service.get_next_round_path_recommendation(db, project_id, user_id=uid)
     return NextRoundPathResponse(**res)
 
 
@@ -641,4 +664,186 @@ def record_technique_feedback(
         req=payload,
         current_user=current_user
     )
+
+
+# ==========================================
+# 5. 다중 사용자 공통 경로 학습 API (Phase 8)
+# ==========================================
+@router.get(
+    "/projects/{project_id}/common-path",
+    response_model=Optional[ProjectCommonPathResponse],
+    summary="5. 프로젝트별 최신 공통 권장 경로 조회"
+)
+def get_active_common_path(
+    project_id: int = Path(..., description="프로젝트 고유 ID"),
+    token: Optional[str] = Query(None, description="모바일 QR 접속 보안 토큰"),
+    current_user: Optional[User] = Depends(get_optional_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    해당 프로젝트의 다중 사용자 학습을 통해 생성된 최신 활성 공통 권장 경로를 조회합니다.
+    (미생성 상태인 경우 null 반환)
+    """
+    auth_service.verify_project_ownership(db, str(project_id), current_user, _clean_token(token))
+    return collaborative_path_service.get_active_common_path(db, project_id)
+
+
+@router.post(
+    "/projects/{project_id}/common-path/learn",
+    response_model=CommonPathLearnResponse,
+    summary="5. 프로젝트별 다중 사용자 공통 경로 학습 실행"
+)
+def learn_project_common_path(
+    project_id: int = Path(..., description="프로젝트 고유 ID"),
+    payload: Optional[CommonPathLearnRequest] = None,
+    token: Optional[str] = Query(None, description="모바일 QR 접속 보안 토큰"),
+    current_user: Optional[User] = Depends(get_optional_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    동일 프로젝트에 참여한 다중 사용자의 PHONE_GPS 보행 경로와 품질 점수를 분석하여,
+    품질이 우수한 경로에 가중치를 부여한 최신 버전의 공통 권장 경로를 생성/갱신합니다.
+    """
+    auth_service.verify_project_ownership(db, str(project_id), current_user, _clean_token(token))
+    min_q = payload.min_quality_threshold if payload and payload.min_quality_threshold is not None else 60.0
+    max_p = payload.max_paths_to_evaluate if payload and payload.max_paths_to_evaluate is not None else 50
+
+    new_path = collaborative_path_service.learn_project_common_path(
+        db=db,
+        project_id=project_id,
+        min_quality_threshold=min_q,
+        max_paths=max_p,
+        current_user=current_user
+    )
+
+    return CommonPathLearnResponse(
+        status="success",
+        project_id=project_id,
+        version=new_path.version,
+        message=f"다중 사용자({new_path.contributor_count}명)의 우수 경로({new_path.total_paths_used}건)를 반영한 v{new_path.version} 공통 권장 경로가 성공적으로 학습되었습니다.",
+        contributor_count=new_path.contributor_count,
+        total_paths_used=new_path.total_paths_used,
+        quality_score=new_path.quality_score,
+        common_path=new_path
+    )
+
+
+@router.get(
+    "/projects/{project_id}/common-path/history",
+    response_model=CommonPathHistoryResponse,
+    summary="5. 공통 권장 경로 버전별 업데이트 이력 조회"
+)
+def get_common_path_history(
+    project_id: int = Path(..., description="프로젝트 고유 ID"),
+    token: Optional[str] = Query(None, description="모바일 QR 접속 보안 토큰"),
+    current_user: Optional[User] = Depends(get_optional_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    해당 프로젝트의 공통 권장 경로 버전 이력 전체를 최신순으로 조회합니다.
+    """
+    auth_service.verify_project_ownership(db, str(project_id), current_user, _clean_token(token))
+    history = collaborative_path_service.get_common_path_history(db, project_id)
+    active_ver = next((h.version for h in history if h.is_active), None)
+
+    return CommonPathHistoryResponse(
+        project_id=project_id,
+        total_versions=len(history),
+        active_version=active_ver,
+        history=history
+    )
+
+
+# ==========================================
+# 6. 사용자별 맞춤 촬영 경로 API (Phase 9)
+# ==========================================
+@router.get(
+    "/projects/{project_id}/personalized-path",
+    response_model=PersonalizedShootingPathResponse,
+    summary="6. 개인별 맞춤 촬영 권장 경로 조회 [모바일]"
+)
+def get_mobile_personalized_path(
+    project_id: int = Path(..., description="프로젝트 고유 ID"),
+    token: Optional[str] = Query(None, description="모바일 QR 접속 보안 토큰"),
+    current_user: Optional[User] = Depends(get_optional_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    모바일 현장 접속 사용자를 위한 맞춤 권장 동선 조회 (미존재 시 자동 생성)
+    """
+    proj = auth_service.verify_project_ownership(db, str(project_id), current_user, _clean_token(token))
+    target_user_id = current_user.id if current_user else proj.user_id or 1
+
+    pers = personalized_path_service.get_user_personalized_path(db, project_id, target_user_id)
+    if not pers:
+        pers = personalized_path_service.generate_personalized_path(db, project_id, target_user_id, "AUTO")
+
+    is_stale, latest_ver = personalized_path_service.check_staleness(db, pers)
+    res_dict = {
+        "id": pers.id,
+        "project_id": pers.project_id,
+        "user_id": pers.user_id,
+        "common_path_id": pers.common_path_id,
+        "base_common_version": pers.base_common_version,
+        "active_common_version": latest_ver,
+        "is_stale": is_stale,
+        "variation_type": pers.variation_type,
+        "personalized_waypoints": pers.personalized_waypoints,
+        "generation_reason": pers.generation_reason,
+        "style_metadata": pers.style_metadata,
+        "is_active": pers.is_active,
+        "created_at": pers.created_at,
+        "updated_at": pers.updated_at
+    }
+    return PersonalizedShootingPathResponse(**res_dict)
+
+
+@router.post(
+    "/projects/{project_id}/personalized-path/generate",
+    response_model=PersonalizedShootingPathResponse,
+    summary="6. 개인별 맞춤 촬영 경로 생성 및 모드 변경 [모바일]"
+)
+def generate_mobile_personalized_path(
+    project_id: int = Path(..., description="프로젝트 고유 ID"),
+    payload: Optional[PersonalizedPathGenerateRequest] = None,
+    token: Optional[str] = Query(None, description="모바일 QR 접속 보안 토큰"),
+    current_user: Optional[User] = Depends(get_optional_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    모바일 현장에서 사용자의 특정 변형 유형(STRAIGHT, ZIGZAG, POI_WAYPOINT)을 적용하여 동선을 재생성합니다.
+    """
+    proj = auth_service.verify_project_ownership(db, str(project_id), current_user, _clean_token(token))
+    target_user_id = current_user.id if current_user else proj.user_id or 1
+
+    pref_type = payload.preferred_variation_type if payload else "AUTO"
+    force_regen = payload.force_regenerate if payload else False
+
+    pers = personalized_path_service.generate_personalized_path(
+        db=db,
+        project_id=project_id,
+        user_id=target_user_id,
+        preferred_variation_type=pref_type,
+        force_regenerate=force_regen
+    )
+
+    is_stale, latest_ver = personalized_path_service.check_staleness(db, pers)
+    res_dict = {
+        "id": pers.id,
+        "project_id": pers.project_id,
+        "user_id": pers.user_id,
+        "common_path_id": pers.common_path_id,
+        "base_common_version": pers.base_common_version,
+        "active_common_version": latest_ver,
+        "is_stale": is_stale,
+        "variation_type": pers.variation_type,
+        "personalized_waypoints": pers.personalized_waypoints,
+        "generation_reason": pers.generation_reason,
+        "style_metadata": pers.style_metadata,
+        "is_active": pers.is_active,
+        "created_at": pers.created_at,
+        "updated_at": pers.updated_at
+    }
+    return PersonalizedShootingPathResponse(**res_dict)
+
 

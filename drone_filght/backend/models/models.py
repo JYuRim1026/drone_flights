@@ -53,9 +53,10 @@ class User(Base):
     preference_scores = relationship("UserPreferenceScore", back_populates="user", cascade="all, delete-orphan", foreign_keys="[UserPreferenceScore.user_id]")
     interactions = relationship("Interaction", back_populates="user", cascade="all, delete-orphan", foreign_keys="[Interaction.user_id]")
 
-    # 신규 관계 (1:N shooting_paths, 1:N location_assets)
+    # 신규 관계 (1:N shooting_paths, 1:N location_assets, 1:N personalized_paths)
     shooting_paths = relationship("ShootingPath", back_populates="user", foreign_keys="[ShootingPath.user_id]")
     location_assets = relationship("LocationAsset", back_populates="user", foreign_keys="[LocationAsset.user_id]")
+    personalized_paths = relationship("PersonalizedShootingPath", back_populates="user", cascade="all, delete-orphan", foreign_keys="[PersonalizedShootingPath.user_id]")
 
 
 # ==========================================
@@ -280,6 +281,8 @@ class ShootingProject(Base):
     analyses = relationship("ShootingAnalysis", back_populates="project", cascade="all, delete-orphan", foreign_keys="[ShootingAnalysis.project_id]")
     paths = relationship("ShootingPath", back_populates="project", cascade="all, delete-orphan", foreign_keys="[ShootingPath.project_id]")
     assets = relationship("LocationAsset", back_populates="project", cascade="all, delete-orphan", foreign_keys="[LocationAsset.project_id]")
+    common_paths = relationship("ProjectCommonPath", back_populates="project", cascade="all, delete-orphan", foreign_keys="[ProjectCommonPath.project_id]")
+    personalized_paths = relationship("PersonalizedShootingPath", back_populates="project", cascade="all, delete-orphan", foreign_keys="[PersonalizedShootingPath.project_id]")
 
 
 @event.listens_for(ShootingProject, "after_insert")
@@ -529,3 +532,80 @@ class LocationAsset(Base):
     # 관계 설정
     project = relationship("ShootingProject", back_populates="assets")
     user = relationship("User", back_populates="location_assets", foreign_keys=[user_id])
+
+
+# ==========================================
+# 14. project_common_paths — 다중 사용자 공통 학습 권장 경로 (Phase 8)
+# ==========================================
+class ProjectCommonPath(Base):
+    __tablename__ = "project_common_paths"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, index=True)
+    project_id = Column(Integer, ForeignKey("shooting_projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    version = Column(Integer, default=1, nullable=False, index=True)
+
+    # 공통 권장 웨이포인트 목록
+    # [{"seq": 1, "lat": ..., "lng": ..., "target_heading": ..., "target_pitch": ..., "action": ...}, ...]
+    common_waypoints = Column(JSON, nullable=False, default=list)
+
+    # 반영 메타데이터
+    contributor_count = Column(Integer, default=1, nullable=False)   # 학습에 기여한 순 사용자(조종사) 수
+    total_paths_used = Column(Integer, default=1, nullable=False)    # 학습에 반영된 유효 보행 동선 수
+    quality_score = Column(Float, default=80.0, nullable=False)      # 가중 평균 종합 품질 점수
+    average_deviation_m = Column(Float, nullable=True)               # 참여 경로들의 평균 횡방향 이탈도
+    average_composition_score = Column(Float, nullable=True)         # 참여 경로들의 평균 AI 구도 점수
+    average_satisfaction_score = Column(Float, nullable=True)        # 참여자들의 평균 만족도 점수
+
+    learning_metadata = Column(JSON, nullable=True, default=dict)    # 반영된 path_id 목록, 가중치 산출 내역 등
+    is_active = Column(Boolean, default=True, nullable=False, index=True) # 최신 활성 버전 여부
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    # 관계 설정
+    project = relationship("ShootingProject", back_populates="common_paths")
+
+
+# ==========================================
+# 14. personalized_shooting_paths — Phase 9 사용자별 맞춤 촬영 경로 변형 관리
+# ==========================================
+class PersonalizedShootingPath(Base):
+    """
+    Phase 9: 개인별 촬영 경로 변형 모델
+    - 최신 활성 공통 경로(ProjectCommonPath)를 불변 기준선으로 참조
+    - 사용자의 과거 촬영 이력, 이탈도, 선호 기법을 분석하여 맞춤 경로 생성
+    - 변형 유형: STRAIGHT (직선형), ZIGZAG (지그재그형), POI_WAYPOINT (주요촬영지점경유형), COLD_START (신규기본)
+    """
+    __tablename__ = "personalized_shooting_paths"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, index=True)
+    project_id = Column(Integer, ForeignKey("shooting_projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    common_path_id = Column(Integer, ForeignKey("project_common_paths.id", ondelete="SET NULL"), nullable=True)
+
+    # 생성 시점의 기준 공통 경로 버전 (Phase 8 연동)
+    base_common_version = Column(Integer, default=1, nullable=False, index=True)
+
+    # 개인별 변형 유형
+    variation_type = Column(String(50), nullable=False, default="STRAIGHT", index=True)
+
+    # 생성된 개인별 맞춤 권장 웨이포인트 목록
+    # [{"seq": 1, "lat": ..., "lng": ..., "target_heading": ..., "target_pitch": ..., "action": ..., "guide_msg": ...}]
+    personalized_waypoints = Column(JSON, nullable=False, default=list)
+
+    # 개인화 생성 사유 및 성향 분석 요약문
+    generation_reason = Column(Text, nullable=False)
+
+    # 세부 메타데이터: {lateral_offset_m, added_poi_info: {...}, profile_summary: {...}}
+    style_metadata = Column(JSON, nullable=True, default=dict)
+
+    # 활성 상태 (사용자-프로젝트 쌍마다 최신 1건만 is_active=True)
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    # 관계 설정
+    project = relationship("ShootingProject", back_populates="personalized_paths")
+    user = relationship("User", back_populates="personalized_paths")
+    common_path = relationship("ProjectCommonPath")

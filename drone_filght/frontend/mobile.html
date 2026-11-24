@@ -798,7 +798,7 @@ function launchCameraWithTechnique(techniqueId) {
   window.location.href = `camera.html?project_code=${pCode}&technique=${techniqueId}&token=mobile_launch`;
 }
 
-// Phase 6: AI 보행 경로 분석 및 차기 회차 보정 요약 조회
+// Phase 6 & Phase 9: AI 보행 경로 분석 및 개인 맞춤 차기 회차 보정 요약 조회
 async function loadPathCorrectionSummary(projectId) {
   const content = $('pathCorrectionCardContent');
   const badge = $('pathInheritedBadge');
@@ -815,7 +815,15 @@ async function loadPathCorrectionSummary(projectId) {
     const data = await res.json();
 
     if (badge) {
-      if (data.is_inherited_from_previous) {
+      if (data.is_personalized) {
+        badge.textContent = `🎯 [${data.personalized_variation_type || '맞춤'}] 개인 맞춤 동선`;
+        badge.style.background = '#fae8ff';
+        badge.style.color = '#86198f';
+      } else if (data.common_path_version) {
+        badge.textContent = `🌐 v${data.common_path_version} 공통 권장 동선 적용`;
+        badge.style.background = '#e0e7ff';
+        badge.style.color = '#3730a3';
+      } else if (data.is_inherited_from_previous) {
         badge.textContent = `✓ ${data.next_shooting_number}회차 보정 승계 완료`;
         badge.style.background = '#dcfce7';
         badge.style.color = '#15803d';
@@ -832,6 +840,18 @@ async function loadPathCorrectionSummary(projectId) {
          </div>`
       : '';
 
+    const personalizedBadgeInfo = data.is_personalized
+      ? `<div style="margin-top:6px; font-size:11px; background:#fdf4ff; border:1px solid #f0abfc; padding:6px 8px; border-radius:6px; color:#701a75;">
+          ✨ <b>${data.personalized_variation_type}</b> 개인 맞춤 변형 동선이 활성화되어 적용 중입니다.
+         </div>`
+      : '';
+
+    const zigzagSafetyNotice = (data.is_personalized && data.personalized_variation_type === 'ZIGZAG')
+      ? `<div style="margin-top:6px; font-size:10.5px; background:#fffbeb; border:1px solid #fcd34d; padding:6px 8px; border-radius:6px; color:#92400e; line-height:1.35;">
+          ⚠️ <b>보행 안전 주의</b>: 본 지그재그 동선은 촬영 구도 제안용 권장 가이드입니다. 실제 보행 가능 여부(인도/차도 구분) 및 지형 장애물은 자동 검증되지 않았으므로 이동 전 현장 주변을 반드시 육안 확인하세요.
+         </div>`
+      : '';
+
     const wpCount = data.recommended_waypoints ? data.recommended_waypoints.length : 0;
 
     content.innerHTML = `
@@ -843,10 +863,39 @@ async function loadPathCorrectionSummary(projectId) {
         ${data.source_info}
       </div>
       ${prevInfo}
+      ${personalizedBadgeInfo}
+      ${zigzagSafetyNotice}
+      <button type="button" onclick="triggerGeneratePersonalizedMobile(${projectId})" style="margin-top:10px; width:100%; padding:7px; font-size:11.5px; font-weight:700; background:#9333ea; color:white; border:none; border-radius:6px; cursor:pointer;">
+        ✨ 내 성향 맞춤 동선 분석 및 생성
+      </button>
     `;
   } catch (err) {
     console.warn('경로 보정 요약 로드 실패:', err);
     if (content) content.innerHTML = `<span style="color:#ef4444; font-size:11px;">경로 보정 정보를 불러오지 못했습니다.</span>`;
+  }
+}
+
+async function triggerGeneratePersonalizedMobile(projectId) {
+  try {
+    const base = getApiBaseUrl();
+    const token = localStorage.getItem('sky_auth_token');
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`${base}/api/mobile/projects/${projectId}/personalized-path/generate`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ force_recalculate: true })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      toast(`[맞춤 동선] ${data.variation_type} 동선이 생성되었습니다!`);
+      await loadPathCorrectionSummary(projectId);
+    } else {
+      toast(`[안내] ${data.detail || '맞춤 동선 생성 실패'}`);
+    }
+  } catch (e) {
+    toast('맞춤 동선 생성 중 오류가 발생했습니다.');
   }
 }
 

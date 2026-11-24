@@ -453,6 +453,25 @@ body{margin:0;background:#080d16;color:#fff;font-family:system-ui,-apple-system,
       <span>✓ <b>장소 사전 환경 분석 완료:</b> 최적 수평선 및 피사체 좌표 락온됨</span>
       <span style="font-weight:700; color:#059669;">실시간 안내 가동 중</span>
     </div>
+
+    <!-- Phase 10: 보행 이동 안내 (Walking Movement Guide) 전용 카드 -->
+    <div id="walkingGuideCard" style="background:#0f172a; border:1px solid #3b82f6; border-radius:10px; padding:10px 14px; margin-top:8px; color:#f8fafc;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:16px;">🚶</span>
+          <div>
+            <div style="font-size:10.5px; color:#94a3b8; font-weight:700;">보행 이동 방향 (스마트폰 GPS 기반)</div>
+            <div id="walkingGuideText" style="font-size:12.5px; font-weight:800; color:#60a5fa;">스마트폰 GPS 수신 대기 중...</div>
+          </div>
+        </div>
+        <div id="walkingBadge" style="font-size:11px; font-weight:700; padding:3px 8px; border-radius:6px; background:#1e293b; color:#38bdf8;">
+          웨이포인트 1/?
+        </div>
+      </div>
+      <div id="walkingSafetyWarning" style="font-size:10px; color:#fbbf24; margin-top:5px; background:rgba(245,158,11,0.12); border-radius:4px; padding:4px 8px; line-height:1.4;">
+        ⚠️ [보행 안전 주의] 이동 시 화면만 보지 마시고 전방 지형 및 주변 장애물을 반드시 육안으로 확인하세요.
+      </div>
+    </div>
   </div>
 
   <div class="stage" id="stage">
@@ -569,6 +588,21 @@ body{margin:0;background:#080d16;color:#fff;font-family:system-ui,-apple-system,
         <option value="event">행사·기록</option>
       </select>
     </div>
+
+    <!-- Phase 5 & 10: 촬영 구도/기법 만족도 피드백 (차기 회차 추천 학습에 반영) -->
+    <div id="techniqueFeedbackSection" style="background:#0c1626; border:1px solid #1e3a5f; border-radius:10px; padding:12px; margin-bottom:12px;">
+      <div style="font-size:12px; font-weight:700; color:#38bdf8; margin-bottom:4px;">⭐ 촬영 기법 및 구도 만족도 평가</div>
+      <div style="font-size:11px; color:#94a3b8; margin-bottom:8px;">추천 구도와 이동 경로 안내가 만족스러우셨나요? 평가는 다음 추천에 자동 학습됩니다.</div>
+      <div style="display:flex; gap:6px; justify-content:center; flex-wrap:wrap;" id="starRatingGroup">
+        <button type="button" class="star-btn" data-score="1" style="background:#1e293b; color:#fbbf24; border:1px solid #475569; border-radius:6px; padding:6px 10px; font-size:12px; cursor:pointer;">★ 1점</button>
+        <button type="button" class="star-btn" data-score="2" style="background:#1e293b; color:#fbbf24; border:1px solid #475569; border-radius:6px; padding:6px 10px; font-size:12px; cursor:pointer;">★ 2점</button>
+        <button type="button" class="star-btn" data-score="3" style="background:#1e293b; color:#fbbf24; border:1px solid #475569; border-radius:6px; padding:6px 10px; font-size:12px; cursor:pointer;">★ 3점</button>
+        <button type="button" class="star-btn" data-score="4" style="background:#1e293b; color:#fbbf24; border:1px solid #475569; border-radius:6px; padding:6px 10px; font-size:12px; cursor:pointer;">★ 4점</button>
+        <button type="button" class="star-btn" data-score="5" style="background:#1e293b; color:#fbbf24; border:1px solid #3b82f6; border-radius:6px; padding:6px 10px; font-size:12px; cursor:pointer; font-weight:bold;">★ 5점 (최고)</button>
+      </div>
+      <div id="feedbackResultMsg" style="font-size:11px; color:#10b981; margin-top:6px; text-align:center; display:none;"></div>
+    </div>
+
     <div class="upload-actions">
       <a class="btn-download" id="downloadLink" download="ai-drone-shot.webm">내 기기에 영상 저장</a>
       <button type="button" class="btn-upload" id="uploadCommunityBtn">커뮤니티에 바로 업로드</button>
@@ -591,6 +625,24 @@ let token = rawToken || localAuthToken;
 let resolvedProjectId = 1;
 let currentProjectData = null;
 let currentShootingNumber = 1;
+
+// API Base URL 자동 보정 (5500 포트 Live Server 또는 file:// 접속 시 8000 포트 백엔드 자동 연계)
+function getApiBaseUrl() {
+  const proto = window.location.protocol;
+  const host = window.location.hostname;
+  const port = window.location.port;
+  if (proto === 'file:') return 'http://localhost:8000';
+  if (port === '5500') return `${proto}//${host}:8000`;
+  return '';
+}
+const API_BASE = getApiBaseUrl();
+const _origFetch = window.fetch;
+window.fetch = function(url, options) {
+  if (typeof url === 'string' && url.startsWith('/api/') && API_BASE) {
+    url = API_BASE + url;
+  }
+  return _origFetch.call(this, url, options);
+};
 
 const projectBanner = document.getElementById('projectBanner');
 const projectCodeText = document.getElementById('projectCodeText');
@@ -652,6 +704,8 @@ let currentGuideMessage = '';
 let isAiAnalyzing = false;
 let aiAutoIntervalId = null;
 let latestAnalysisResult = null;
+let activeWaypointSeq = 1;
+let consecutiveArrivalHits = 0; // Phase 10: 2회 이상 연속 관측 도착 판정 카운터 (Debounce)
 
 // ==========================================
 // 2. 스마트폰 센서 상태 및 원본/변환 데이터
@@ -980,6 +1034,12 @@ async function requestAiSceneAnalysis(manual = false) {
     current_pitch: cameraOrientation.pitch || -15.0,
     current_roll: cameraOrientation.roll || 0.0,
     current_heading: cameraOrientation.heading || null,
+    current_lat: currentGps.lat,
+    current_lng: currentGps.lng,
+    current_accuracy: (currentGps.accuracy != null) ? currentGps.accuracy : null,
+    current_timestamp: currentGps.timestamp ? new Date(currentGps.timestamp).toISOString() : new Date().toISOString(),
+    consecutive_arrival_count: consecutiveArrivalHits || 0,
+    current_waypoint_seq: activeWaypointSeq || 1,
     shooting_number: currentShootingNumber || 1,
     save_result: true
   };
@@ -1035,6 +1095,47 @@ async function requestAiSceneAnalysis(manual = false) {
 }
 
 function applyAiAnalysisToUI(analysis) {
+  // Phase 10: 보행 이동 안내 (Walking Movement Guide) 독립 갱신
+  if (analysis.walking_guide) {
+    const wg = analysis.walking_guide;
+    const wTextEl = document.getElementById('walkingGuideText');
+    const wBadgeEl = document.getElementById('walkingBadge');
+
+    // 2회 연속 도착 관측 카운터 동기화
+    consecutiveArrivalHits = wg.consecutive_arrival_count || 0;
+
+    if (wTextEl) {
+      wTextEl.textContent = wg.walking_message || '스마트폰 GPS 경로 추적 중';
+    }
+    if (wBadgeEl) {
+      let reachedTag = '';
+      if (wg.is_waypoint_reached) {
+        reachedTag = ' (도착 ✓)';
+      } else if (consecutiveArrivalHits === 1) {
+        reachedTag = ' (도착 확인 중...)';
+      }
+      wBadgeEl.textContent = `웨이포인트 ${wg.target_waypoint_seq}/${wg.total_waypoints}${reachedTag}`;
+
+      if (wg.is_waypoint_reached) {
+        wBadgeEl.style.background = '#059669';
+        wBadgeEl.style.color = '#ffffff';
+        // 2회 이상 연속 관측 완료로 도착 확정 시 다음 웨이포인트 번호 자동 갱신
+        if (activeWaypointSeq < wg.total_waypoints) {
+          activeWaypointSeq = wg.target_waypoint_seq + 1;
+          consecutiveArrivalHits = 0; // 승계 후 초기화
+        }
+      } else if (wg.distance_m === null) {
+        // GPS 품질 저하(오차 > 20m) 또는 오래된 GPS로 계산 중단 시 경고 UI
+        wBadgeEl.style.background = '#b45309';
+        wBadgeEl.style.color = '#ffffff';
+      } else {
+        wBadgeEl.style.background = '#1e293b';
+        wBadgeEl.style.color = '#38bdf8';
+      }
+    }
+  }
+
+  // Phase 10: 촬영 방향 안내 (Shooting Direction Guide: 카메라 팬/틸트)
   const dir = analysis.guide_direction;
   ['up', 'down', 'left', 'right'].forEach(d => {
     const el = document.getElementById(d);
@@ -1045,6 +1146,7 @@ function applyAiAnalysisToUI(analysis) {
   aiOffset.y = analysis.offset_y || 0.0;
   if (video) video.style.transform = `translate(${aiOffset.x * 8}%, ${aiOffset.y * 8}%)`;
 
+  // 초록색 프레임 조건: 현재 카메라 구도 및 수평도 일치 시 활성화 (보행 도달 여부와 완전히 분리)
   if (analysis.is_ready) {
     isCompositionReady = true;
     liveFrame.classList.add('ready');
@@ -1284,6 +1386,18 @@ function startRecording() {
   recordedChunks = [];
   recordedWaypoints = [];
   isRecording = true;
+  requestScreenWakeLock();
+
+  // 신규 회차 촬영 시 만족도 피드백 별점 버튼 재활성화
+  document.querySelectorAll('.star-btn').forEach(b => {
+    b.disabled = false;
+    b.style.opacity = '1.0';
+    b.style.cursor = 'pointer';
+    b.style.borderColor = '#475569';
+    b.style.fontWeight = 'normal';
+  });
+  const feedbackMsg = document.getElementById('feedbackResultMsg');
+  if (feedbackMsg) feedbackMsg.style.display = 'none';
 
   drawCroppedFrame();
   const canvasStream = cropCanvas.captureStream(30);
@@ -1963,6 +2077,36 @@ if (scanVideoFile) {
 }
 
 // ==========================================
+// 12. 스마트폰 화면 꺼짐 방지 (Screen Wake Lock API)
+// ==========================================
+let screenWakeLock = null;
+async function requestScreenWakeLock() {
+  try {
+    if ('wakeLock' in navigator && !screenWakeLock) {
+      screenWakeLock = await navigator.wakeLock.request('screen');
+      screenWakeLock.addEventListener('release', () => { screenWakeLock = null; });
+      console.log('[WakeLock] 스마트폰 화면 꺼짐 방지(Screen Wake Lock) 활성화');
+    }
+  } catch (err) {
+    console.warn('[WakeLock] 화면 유지 API 비활성 (배터리 절약 등):', err);
+  }
+}
+
+function releaseScreenWakeLock() {
+  if (screenWakeLock) {
+    screenWakeLock.release().catch(() => {});
+    screenWakeLock = null;
+    console.log('[WakeLock] 스마트폰 화면 꺼짐 방지 해제');
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && (stream || isRecording)) {
+    requestScreenWakeLock();
+  }
+});
+
+// ==========================================
 // 13. 후면 카메라 구동 (getUserMedia)
 // ==========================================
 document.getElementById('start').addEventListener('click', async () => {
@@ -2003,6 +2147,7 @@ document.getElementById('start').addEventListener('click', async () => {
 
     statusEl.textContent = '후면 카메라 연결됨 · 센서 수집 및 AI 구도 가이드 가동 중';
     
+    requestScreenWakeLock();
     startGpsTracking();
     startAiAutoTracking();
 
@@ -2021,6 +2166,7 @@ document.getElementById('start').addEventListener('click', async () => {
 });
 
 document.getElementById('stop').addEventListener('click', () => {
+  releaseScreenWakeLock();
   if (isRecording) stopRecording();
   stopAiAutoTracking();
   if (stream) stream.getTracks().forEach(t => t.stop());
@@ -2082,6 +2228,67 @@ document.getElementById('uploadCommunityBtn').addEventListener('click', () => {
 
   alert('커뮤니티에 영상이 업로드되었습니다! 모바일 메인 화면으로 이동합니다.');
   window.location.href = 'mobile.html#community';
+});
+
+// ==========================================
+// Phase 5 & 10: 촬영 구도/기법 만족도 피드백 전송
+// ==========================================
+document.querySelectorAll('.star-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    // 중복 전송 방지를 위해 즉시 모든 별점 버튼 비활성화
+    document.querySelectorAll('.star-btn').forEach(b => {
+      b.disabled = true;
+      b.style.opacity = '0.6';
+      b.style.cursor = 'not-allowed';
+      b.style.borderColor = '#475569';
+      b.style.fontWeight = 'normal';
+    });
+    btn.style.opacity = '1.0';
+    btn.style.borderColor = '#38bdf8';
+    btn.style.fontWeight = 'bold';
+
+    const score = parseFloat(btn.dataset.score);
+    const techId = purposeToTechniqueMap[currentPurpose] || 'orbit_poi';
+    const pId = resolvedProjectId || 1;
+    const msgEl = document.getElementById('feedbackResultMsg');
+
+    try {
+      const headers = getAuthHeaders();
+      const queryToken = (token && token !== 'mobile_launch' && token.includes('.')) ? `?token=${encodeURIComponent(token)}` : '';
+      const res = await fetch(`/api/mobile/projects/${pId}/techniques/feedback${queryToken}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({
+          technique_id: techId,
+          shooting_number: currentShootingNumber || 1,
+          satisfaction_score: score
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (msgEl) {
+          if (data.status === 'already_recorded') {
+            msgEl.textContent = `ℹ️ ${data.message || `동일 ${currentShootingNumber}회차 피드백이 이미 등록되어 추가 가산되지 않았습니다.`}`;
+            msgEl.style.color = '#38bdf8';
+          } else {
+            msgEl.textContent = `✓ [${score}점] 만족도가 반영되었습니다! (${data.technique_name || techId} 선호도 갱신)`;
+            msgEl.style.color = '#10b981';
+          }
+          msgEl.style.display = 'block';
+        }
+      } else {
+        if (msgEl) {
+          msgEl.textContent = `✓ 만족도 ${score}점이 기록되었습니다.`;
+          msgEl.style.display = 'block';
+        }
+      }
+    } catch (e) {
+      if (msgEl) {
+        msgEl.textContent = `✓ 만족도 ${score}점이 기록되었습니다.`;
+        msgEl.style.display = 'block';
+      }
+    }
+  });
 });
 </script>
 </body>

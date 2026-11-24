@@ -12,7 +12,9 @@ from backend.models.models import (
     Interaction,
     ShootingAnalysis,
     ShootingPath,
-    LocationAsset
+    LocationAsset,
+    ProjectCommonPath,
+    PersonalizedShootingPath
 )
 
 __all__ = [
@@ -29,5 +31,7 @@ __all__ = [
     "Interaction",
     "ShootingAnalysis",
     "ShootingPath",
-    "LocationAsset"
+    "LocationAsset",
+    "ProjectCommonPath",
+    "PersonalizedShootingPath"
 ]

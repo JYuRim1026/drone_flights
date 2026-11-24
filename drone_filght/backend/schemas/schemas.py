@@ -180,6 +180,14 @@ class AnalyzeRequest(BaseModel):
     detected_horizon_y: Optional[float] = 0.5
     save_result: Optional[bool] = Field(True, description="분석 결과 DB(shooting_analyses) 자동 저장 여부")
 
+    # Phase 10: 실시간 스마트폰 GPS 위치 및 목표 웨이포인트 연동 (PHONE_GPS)
+    current_lat: Optional[float] = Field(None, description="스마트폰 실시간 위도 (PHONE_GPS)")
+    current_lng: Optional[float] = Field(None, description="스마트폰 실시간 경도 (PHONE_GPS)")
+    current_accuracy: Optional[float] = Field(None, description="스마트폰 GPS 오차 반경 (m, >20m시 계산 중단)")
+    current_timestamp: Optional[str] = Field(None, description="스마트폰 GPS 측정 시각 (ISO 8601 또는 epoch 문자열)")
+    consecutive_arrival_count: Optional[int] = Field(0, description="현재 목표 웨이포인트 2.5m 이내 연속 관측 횟수 (도착 확정 debounce용)")
+    current_waypoint_seq: Optional[int] = Field(None, description="현재 진행 목표 웨이포인트 순번")
+
 class AnalyzeResponse(BaseModel):
     project_id: int
     frame_score: int
@@ -201,6 +209,11 @@ class AnalyzeResponse(BaseModel):
     shooting_number: Optional[int] = None
     user_id: Optional[int] = None
     source: Optional[str] = None
+
+    # Phase 10: 촬영 방향(Shooting) vs 보행 이동(Walking) 분리 가이드 및 통합 컨텍스트
+    walking_guide: Optional[Dict[str, Any]] = Field(None, description="보행 이동 가이드 (다음 웨이포인트 거리, 방위각, 방위명, 보행지침, 안전안내)")
+    shooting_guide: Optional[Dict[str, Any]] = Field(None, description="카메라 구도 지향 가이드 (상하좌우 미세조정, 수평도, 오프셋)")
+    context_info: Optional[Dict[str, Any]] = Field(None, description="반영된 4가지 통합 데이터 정보 (프로젝트, 장소에셋, 경로버전/유형, 선호기법)")
 
 class RecommendationResponse(BaseModel):
     project_id: int
@@ -650,6 +663,9 @@ class NextRoundPathResponse(BaseModel):
     source_shooting_number: Optional[int] = None
     previous_deviation_score: Optional[float] = None
     previous_deviation_reason: Optional[str] = None
+    common_path_version: Optional[int] = None
+    personalized_variation_type: Optional[str] = None
+    is_personalized: Optional[bool] = False
     recommended_waypoints: List[Dict[str, Any]]
 
 
@@ -759,6 +775,106 @@ class TechniqueFeedbackResponse(BaseModel):
     applied_weight: float
     updated_preference_score: float
     message: str
+
+
+# ==========================================
+# 다중 사용자 공통 학습 경로 (ProjectCommonPath) 스키마 (Phase 8)
+# ==========================================
+class ProjectCommonPathResponse(BaseModel):
+    id: int
+    project_id: int
+    version: int
+    common_waypoints: List[Dict[str, Any]]
+    contributor_count: int
+    total_paths_used: int
+    quality_score: float
+    average_deviation_m: Optional[float] = None
+    average_composition_score: Optional[float] = None
+    average_satisfaction_score: Optional[float] = None
+    learning_metadata: Optional[Dict[str, Any]] = None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class CommonPathLearnRequest(BaseModel):
+    min_quality_threshold: Optional[float] = Field(60.0, description="학습 반영 최소 경로 품질 점수 (기본 60.0)")
+    max_paths_to_evaluate: Optional[int] = Field(50, description="평가할 최대 경로 수")
+
+
+class CommonPathLearnResponse(BaseModel):
+    status: str
+    project_id: int
+    version: int
+    message: str
+    contributor_count: int
+    total_paths_used: int
+    quality_score: float
+    common_path: ProjectCommonPathResponse
+
+
+class CommonPathHistoryResponse(BaseModel):
+    project_id: int
+    total_versions: int
+    active_version: Optional[int] = None
+    history: List[ProjectCommonPathResponse]
+
+
+# ==========================================
+# Phase 9: 개인별 촬영 경로 변형 스키마
+# ==========================================
+class PersonalizedPathGenerateRequest(BaseModel):
+    preferred_variation_type: Optional[str] = Field(
+        "AUTO",
+        description="희망 변형 유형 (AUTO, STRAIGHT, ZIGZAG, POI_WAYPOINT)"
+    )
+    force_regenerate: Optional[bool] = Field(
+        False,
+        description="기존 개인화 경로가 최신이더라도 강제 재생성 여부"
+    )
+
+
+class PersonalizedShootingPathResponse(BaseModel):
+    id: int
+    project_id: int
+    user_id: int
+    common_path_id: Optional[int] = None
+    base_common_version: int
+    active_common_version: Optional[int] = None
+    is_stale: bool = False
+    variation_type: str
+    personalized_waypoints: List[Dict[str, Any]]
+    generation_reason: str
+    style_metadata: Optional[Dict[str, Any]] = None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class PersonalizedPathComparisonResponse(BaseModel):
+    project_id: int
+    user_id: int
+    common_path_version: int
+    variation_type: str
+    generation_reason: str
+    is_stale: bool
+    common_waypoints: List[Dict[str, Any]]
+    personalized_waypoints: List[Dict[str, Any]]
+    waypoint_diff_summary: str
+    total_common_distance_m: float = 0.0
+    total_personalized_distance_m: float = 0.0
+    distance_diff_m: float = 0.0
+    max_offset_from_common_m: float = 0.0
+    avg_offset_from_common_m: float = 0.0
+    poi_target_name: Optional[str] = None
+    comparison_summary: Optional[str] = None
+
 
 
 

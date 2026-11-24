@@ -295,3 +295,12 @@ def health():
         "user_count": user_count,
         "error": err_detail
     }
+
+# ==========================================
+# Frontend Static Files Mount (모바일 실기기 및 로컬 원스톱 서빙)
+# ==========================================
+from fastapi.staticfiles import StaticFiles
+_frontend_dir = os.path.join(str(_PARENT_DIR), "frontend")
+if os.path.exists(_frontend_dir):
+    app.mount("/", StaticFiles(directory=_frontend_dir, html=True), name="frontend")
+

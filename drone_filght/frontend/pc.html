@@ -2095,6 +2095,48 @@ button { cursor: pointer; }
                     AI 구도 일치도: <b>94점</b> · 녹화 완료
                   </div>
                 </div>
+
+                <!-- Phase 8: Multi-user Learned Common Path box -->
+                <div id="commonPathBox" style="margin-top:10px; display:none; background:#eff6ff; border:1px solid #93c5fd; border-radius:8px; padding:10px;">
+                  <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:11.5px; font-weight:800; color:#1e40af;">🌐 다중 사용자 공통 학습 권장 동선</span>
+                    <span id="commonPathVersionBadge" style="font-size:10px; background:#dbeafe; color:#1e40af; padding:2px 6px; border-radius:4px; font-weight:700;">v1</span>
+                  </div>
+                  <div style="font-size:11px; color:#1e3a8a; margin-top:4px;" id="commonPathSummary">
+                    참여자: <b>1명</b> (누적 동선: <b>1건</b>) · 품질 점수: <b>85점</b>
+                  </div>
+                  <button id="btnLearnCommonPath" onclick="triggerLearnCommonPath()" style="margin-top:8px; width:100%; padding:6px; font-size:11px; font-weight:700; background:#2563eb; color:#fff; border:none; border-radius:6px; cursor:pointer;">
+                    ⚡ 다중 사용자 동선 AI 학습 실행
+                  </button>
+                </div>
+
+                <!-- Phase 9: Personalized Path Box -->
+                <div id="personalizedPathBox" style="margin-top:10px; display:none; background:#fdf4ff; border:1px solid #f0abfc; border-radius:8px; padding:10px;">
+                  <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:11.5px; font-weight:800; color:#86198f;">🎯 개인별 맞춤 변형 동선</span>
+                    <span id="personalizedTypeBadge" style="font-size:10px; background:#fae8ff; color:#a21caf; padding:2px 6px; border-radius:4px; font-weight:700;">STRAIGHT</span>
+                  </div>
+                  <div style="font-size:11px; color:#701a75; margin-top:4px;" id="personalizedSummary">
+                    기반 공통 버전: <b>v1</b> · 상태: <b>최신</b>
+                  </div>
+                  <div id="personalizedStaleWarning" style="display:none; font-size:10.5px; color:#b91c1c; background:#fee2e2; border-radius:4px; padding:4px 6px; margin-top:5px; font-weight:600;">
+                    ⚠️ 공통 동선이 최신 버전으로 업데이트되었습니다. 재단장 필요!
+                  </div>
+                  <div id="zigzagSafetyNotice" style="display:none; font-size:10.5px; color:#b45309; background:#fffbeb; border:1px solid #fcd34d; border-radius:4px; padding:6px; margin-top:5px; line-height:1.4;">
+                    ⚠️ <b>현장 보행 안전 주의</b>: 본 지그재그 동선은 촬영 가이드용 권장 동선입니다. 실제 보행 가능 구역(인도/차도 구분) 및 지형 장애물(난간/화단/가로수 등)이 자동 검증되지 않았으므로 보행 전 주변 환경을 반드시 육안 확인하세요.
+                  </div>
+                  <div id="personalizedComparisonInfo" style="display:none; font-size:10.5px; color:#4a044e; margin-top:5px; background:rgba(255,255,255,0.7); padding:6px; border-radius:4px; border:1px dashed #e879f9;">
+                    거리 차이: <b>+0.0m</b> (최대 변위: <b>0.0m</b>)
+                  </div>
+                  <div style="display:flex; gap:6px; margin-top:8px;">
+                    <button id="btnGeneratePersonalizedPath" onclick="triggerGeneratePersonalizedPath()" style="flex:1; padding:6px; font-size:11px; font-weight:700; background:#a21caf; color:#fff; border:none; border-radius:6px; cursor:pointer;">
+                      ✨ 내 성향 맞춤 동선 생성
+                    </button>
+                    <button id="btnComparePersonalizedPath" onclick="triggerComparePersonalizedPath()" style="padding:6px 10px; font-size:11px; font-weight:600; background:#fff; color:#a21caf; border:1px solid #d946ef; border-radius:6px; cursor:pointer;">
+                      📊 공통과 비교
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -6422,9 +6464,165 @@ async function loadProjectShootingHistory(identifier) {
           }
         }
       }
+      // Phase 8: 공통 학습 동선 상태 조회
+      await loadCommonPathStatus(pId);
+      await loadPersonalizedPathStatus(pId);
     }
   } catch (e) {
     console.warn('PC 프로젝트 촬영 이력 로드 예외:', e);
+  }
+}
+
+let currentCommonPathProjectId = 1;
+
+async function loadPersonalizedPathStatus(projectId) {
+  try {
+    const box = $('personalizedPathBox');
+    const res = await fetch(`${getApiBaseUrl()}/api/common/projects/${projectId}/personalized-path`, {
+      headers: getAuthHeaders()
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.path_id) {
+        if (box) {
+          box.style.display = 'block';
+          $('personalizedTypeBadge').textContent = data.variation_type || 'STRAIGHT';
+          $('personalizedTypeBadge').style.background = data.variation_type === 'ZIGZAG' ? '#fef3c7' : (data.variation_type === 'POI_WAYPOINT' ? '#e0e7ff' : '#fae8ff');
+          $('personalizedTypeBadge').style.color = data.variation_type === 'ZIGZAG' ? '#92400e' : (data.variation_type === 'POI_WAYPOINT' ? '#3730a3' : '#a21caf');
+          
+          $('personalizedSummary').innerHTML = `
+            유형: <b>${data.variation_type}</b> · 기반: <b>v${data.base_common_version}</b><br>
+            <span style="font-size:10px; color:#6b21a8;">${data.generation_reason || '성향 분석 완료'}</span>
+          `;
+          
+          const staleWarn = $('personalizedStaleWarning');
+          if (staleWarn) {
+            staleWarn.style.display = data.is_stale ? 'block' : 'none';
+          }
+          const safetyEl = $('zigzagSafetyNotice');
+          if (safetyEl) {
+            safetyEl.style.display = (data.variation_type === 'ZIGZAG') ? 'block' : 'none';
+          }
+        }
+        return;
+      }
+    }
+    if (box) {
+      box.style.display = 'block';
+      $('personalizedTypeBadge').textContent = '미생성';
+      $('personalizedTypeBadge').style.background = '#f1f5f9';
+      $('personalizedTypeBadge').style.color = '#64748b';
+      $('personalizedSummary').innerHTML = '공통 동선을 바탕으로 조종사 개인 성향에 맞춘 변형 동선을 생성할 수 있습니다.';
+      const staleWarn = $('personalizedStaleWarning');
+      if (staleWarn) staleWarn.style.display = 'none';
+      const safetyEl = $('zigzagSafetyNotice');
+      if (safetyEl) safetyEl.style.display = 'none';
+      const compInfo = $('personalizedComparisonInfo');
+      if (compInfo) compInfo.style.display = 'none';
+    }
+  } catch (err) {
+    console.warn('개인 맞춤 경로 상태 조회 예외:', err);
+  }
+}
+
+async function triggerGeneratePersonalizedPath() {
+  const btn = $('btnGeneratePersonalizedPath');
+  if (btn) btn.textContent = '⏳ 맞춤 동선 분석 및 생성 중...';
+  try {
+    const res = await fetch(`${getApiBaseUrl()}/api/common/projects/${currentCommonPathProjectId}/personalized-path/generate`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ force_recalculate: true })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      toast(`[성공] ${data.variation_type} 맞춤 동선 생성 완료! (기반 공통: v${data.base_common_version})`);
+      await loadPersonalizedPathStatus(currentCommonPathProjectId);
+      await triggerComparePersonalizedPath();
+    } else {
+      toast(`[안내] ${data.detail || '맞춤 동선 생성 실패'}`);
+    }
+  } catch (e) {
+    toast('맞춤 동선 생성 중 오류가 발생했습니다.');
+  } finally {
+    if (btn) btn.textContent = '✨ 내 성향 맞춤 동선 생성';
+  }
+}
+
+async function triggerComparePersonalizedPath() {
+  const compInfo = $('personalizedComparisonInfo');
+  try {
+    const res = await fetch(`${getApiBaseUrl()}/api/common/projects/${currentCommonPathProjectId}/personalized-path/compare`, {
+      headers: getAuthHeaders()
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (compInfo) {
+        compInfo.style.display = 'block';
+        compInfo.innerHTML = `
+          <b>${data.variation_type} 변형 분석</b>: 공통(${data.total_common_distance_m}m) 대비 <b>${data.distance_diff_m > 0 ? '+' : ''}${data.distance_diff_m}m</b> · 최대 변위 <b>${data.max_offset_from_common_m}m</b> (평균 ${data.avg_offset_from_common_m}m)
+          ${data.poi_target_name ? `<br>🎯 POI 유인 목표: <b>${data.poi_target_name}</b>` : ''}
+          <div style="font-size:10px; color:#6b21a8; margin-top:3px;">${data.comparison_summary}</div>
+        `;
+      }
+    } else {
+      const data = await res.json();
+      toast(`[비교 안내] ${data.detail || '비교할 맞춤 경로가 없습니다.'}`);
+    }
+  } catch (e) {
+    console.warn('경로 비교 예외:', e);
+  }
+}
+
+async function loadCommonPathStatus(projectId) {
+  try {
+    currentCommonPathProjectId = projectId;
+    const res = await fetch(`${getApiBaseUrl()}/api/common/projects/${projectId}/common-path`);
+    const box = $('commonPathBox');
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.version) {
+        if (box) {
+          box.style.display = 'block';
+          $('commonPathVersionBadge').textContent = `v${data.version}`;
+          $('commonPathSummary').innerHTML = `
+            반영 조종사: <b>${data.contributor_count}명</b> (누적 동선: <b>${data.total_paths_used}건</b>) · 품질 점수: <b>${data.quality_score}점</b>
+          `;
+        }
+        return;
+      }
+    }
+    // 공통 경로 미생성 상태
+    if (box) {
+      box.style.display = 'block';
+      $('commonPathVersionBadge').textContent = '학습 대기';
+      $('commonPathSummary').innerHTML = '아직 공통 학습 경로가 없습니다. 아래 버튼으로 참여자 동선을 AI 학습하세요.';
+    }
+  } catch (err) {
+    console.warn('공통 경로 상태 조회 예외:', err);
+  }
+}
+
+async function triggerLearnCommonPath() {
+  const btn = $('btnLearnCommonPath');
+  if (btn) btn.textContent = '⏳ 다중 사용자 동선 학습 중...';
+  try {
+    const res = await fetch(`${getApiBaseUrl()}/api/common/projects/${currentCommonPathProjectId}/common-path/learn`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ min_quality_threshold: 60.0 })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      toast(`[성공] v${data.version} 공통 권장 동선 학습 완료! (품질: ${data.quality_score}점)`);
+      await loadCommonPathStatus(currentCommonPathProjectId);
+    } else {
+      toast(`[안내] ${data.detail || '학습 가능한 유효 동선이 부족합니다.'}`);
+    }
+  } catch (e) {
+    toast('공통 동선 학습 중 오류가 발생했습니다.');
+  } finally {
+    if (btn) btn.textContent = '⚡ 다중 사용자 동선 AI 학습 실행';
   }
 }
 

@@ -730,43 +730,123 @@ class ShootingTechniqueService:
         if not tech:
             raise ValueError(f"유효하지 않은 기법 ID입니다: {technique_id}")
 
-        # 가중치 결정: 만족도 4~5점 = 8.0, 3점 = 4.0, 1~2점 = 1.0
-        if satisfaction_score >= 4:
-            pref_weight = 8.0
-        elif satisfaction_score == 3:
-            pref_weight = 4.0
-        else:
-            pref_weight = 1.0
+        # 1. 기존 동일 피드백 (user_id, project_id, shooting_number, technique_id) 조회 및 중복 검증
+        feedback_key = f"{user_id}_{shooting_number}_{technique_id}"
 
-        # 미촬영인 경우 절반만 반영
-        if not was_shot:
-            pref_weight *= 0.5
-
-        # 선호도 점수 갱신
-        updated_score = self._update_preference_score(
-            db=db,
-            user_id=user_id,
-            category="technique",
-            preference_value=technique_id,
-            weight=pref_weight
-        )
-
-        # 최신 분석 이력이나 프로젝트에 피드백 요약 기록 (안전한 메타데이터 저장)
+        # 최신 분석 이력 조회
         analysis = db.query(ShootingAnalysis).filter(
             ShootingAnalysis.project_id == project_id
         ).order_by(ShootingAnalysis.created_at.desc()).first()
 
+        prev_feedback = None
+        analysis_coords = {}
+        if analysis and analysis.target_coordinates and isinstance(analysis.target_coordinates, dict):
+            analysis_coords = dict(analysis.target_coordinates)
+            # feedbacks_by_key 우선 확인
+            by_key = analysis_coords.get("feedbacks_by_key", {})
+            if feedback_key in by_key:
+                prev_feedback = by_key[feedback_key]
+            else:
+                # 기존 feedbacks_by_round 호환 확인
+                by_round = analysis_coords.get("feedbacks_by_round", {})
+                r_item = by_round.get(str(shooting_number))
+                if r_item and r_item.get("technique_id") == technique_id and (r_item.get("user_id") is None or r_item.get("user_id") == user_id):
+                    prev_feedback = r_item
+
+        # ShootingProject의 analysis_result 백업 확인
+        proj_analysis_result = dict(project.analysis_result) if project.analysis_result and isinstance(project.analysis_result, dict) else {}
+        if not prev_feedback and proj_analysis_result:
+            p_by_key = proj_analysis_result.get("feedbacks_by_key", {})
+            if feedback_key in p_by_key:
+                prev_feedback = p_by_key[feedback_key]
+
+        # 2. 가중치 계산 함수
+        def calc_pref_weight(score: int, shot: bool) -> float:
+            if score >= 4:
+                w = 8.0
+            elif score == 3:
+                w = 4.0
+            else:
+                w = 1.0
+            return w if shot else (w * 0.5)
+
+        new_pref_weight = calc_pref_weight(satisfaction_score, was_shot)
+
+        pref_record = db.query(UserPreferenceScore).filter(
+            UserPreferenceScore.user_id == user_id,
+            UserPreferenceScore.category == "technique",
+            UserPreferenceScore.preference_value == technique_id
+        ).first()
+
+        # 3. 중복 피드백 검증 및 차분 반영
+        if prev_feedback:
+            prev_score = prev_feedback.get("satisfaction_score")
+            prev_shot = prev_feedback.get("was_shot", True)
+            prev_weight = float(prev_feedback.get("applied_weight", calc_pref_weight(prev_score, prev_shot)))
+
+            # 동일 피드백 중복 요청: 점수 추가 가산 방지 (멱등성 보장)
+            if prev_score == satisfaction_score and prev_shot == was_shot:
+                current_score = float(pref_record.preference_score) if pref_record else 50.0
+                return {
+                    "status": "already_recorded",
+                    "project_id": project_id,
+                    "technique_id": technique_id,
+                    "satisfaction_score": satisfaction_score,
+                    "was_shot": was_shot,
+                    "applied_weight": 0.0,
+                    "updated_preference_score": current_score,
+                    "message": f"동일 촬영 회차({shooting_number}회차) 피드백이 이미 등록되어 추가 가산되지 않았습니다."
+                }
+
+            # 피드백 내용 변경: 이전 가중치와 새 가중치의 차이(delta)만 반영
+            delta_weight = new_pref_weight - prev_weight
+            updated_score = self._update_preference_score_delta(
+                db=db,
+                user_id=user_id,
+                category="technique",
+                preference_value=technique_id,
+                delta_weight=delta_weight
+            )
+            applied_weight = delta_weight
+        else:
+            # 최초 피드백 반영
+            updated_score = self._update_preference_score(
+                db=db,
+                user_id=user_id,
+                category="technique",
+                preference_value=technique_id,
+                weight=new_pref_weight
+            )
+            applied_weight = new_pref_weight
+
+        # 4. 피드백 메타데이터 저장 (feedbacks_by_key 및 feedbacks_by_round 동시 보존)
+        fb_dict = {
+            "user_id": user_id,
+            "technique_id": technique_id,
+            "shooting_number": shooting_number,
+            "was_shot": was_shot,
+            "satisfaction_score": satisfaction_score,
+            "applied_weight": new_pref_weight,
+            "comment": comment,
+            "recorded_at": datetime.utcnow().isoformat()
+        }
+
         if analysis:
-            coords = analysis.target_coordinates or {}
-            coords["user_feedback"] = {
-                "technique_id": technique_id,
-                "shooting_number": shooting_number,
-                "was_shot": was_shot,
-                "satisfaction_score": satisfaction_score,
-                "comment": comment,
-                "recorded_at": datetime.utcnow().isoformat()
-            }
-            analysis.target_coordinates = coords
+            by_key = dict(analysis_coords.get("feedbacks_by_key", {}))
+            by_key[feedback_key] = fb_dict
+            analysis_coords["feedbacks_by_key"] = by_key
+
+            by_round = dict(analysis_coords.get("feedbacks_by_round", {}))
+            by_round[str(shooting_number)] = fb_dict
+            analysis_coords["feedbacks_by_round"] = by_round
+
+            analysis_coords["user_feedback"] = fb_dict
+            analysis.target_coordinates = analysis_coords
+
+        p_by_key = dict(proj_analysis_result.get("feedbacks_by_key", {}))
+        p_by_key[feedback_key] = fb_dict
+        proj_analysis_result["feedbacks_by_key"] = p_by_key
+        project.analysis_result = proj_analysis_result
 
         db.commit()
 
@@ -776,10 +856,33 @@ class ShootingTechniqueService:
             "technique_id": technique_id,
             "satisfaction_score": satisfaction_score,
             "was_shot": was_shot,
-            "applied_weight": pref_weight,
+            "applied_weight": applied_weight,
             "updated_preference_score": updated_score,
             "message": f"[{tech.name}] 만족도 피드백({satisfaction_score}점)이 반영되었습니다. 맞춤 추천 점수가 갱신되었습니다."
         }
+
+    def _update_preference_score_delta(
+        self,
+        db: Session,
+        user_id: int,
+        category: str,
+        preference_value: str,
+        delta_weight: float
+    ) -> float:
+        """기존 피드백 점수 수정 시 가중치 차분(delta)만 가감 반영"""
+        pref = db.query(UserPreferenceScore).filter(
+            UserPreferenceScore.user_id == user_id,
+            UserPreferenceScore.category == category,
+            UserPreferenceScore.preference_value == preference_value
+        ).first()
+
+        if pref:
+            new_score = min(100.0, max(0.0, float(pref.preference_score or 0.0) + (delta_weight * 3.5)))
+            pref.preference_score = round(new_score, 1)
+            pref.updated_at = datetime.utcnow()
+            return pref.preference_score
+        else:
+            return self._update_preference_score(db, user_id, category, preference_value, delta_weight)
 
     def _update_preference_score(
         self,

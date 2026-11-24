@@ -361,11 +361,12 @@ class MobileService:
     @staticmethod
     def get_next_round_path_recommendation(
         db: Session,
-        project_id: int
+        project_id: int,
+        user_id: Optional[int] = None
     ) -> Dict[str, Any]:
-        """차기 회차 추천 경로 조회 (이전 유효 보정 경로 승계)"""
+        """차기 회차 추천 경로 조회 (Phase 9 사용자 맞춤형 변형 경로 우선 승계)"""
         from backend.services.path_service import path_service
-        return path_service.get_next_round_recommendation(db, project_id)
+        return path_service.get_next_round_recommendation(db, project_id, user_id=user_id)
 
     @staticmethod
     def get_shooting_paths(db: Session, project_id: int) -> List[ShootingPath]:
@@ -691,12 +692,35 @@ class MobileService:
     ) -> TechniqueFeedbackResponse:
         from backend.services.technique_service import technique_service
         user_id = current_user.id if current_user else 1
+
+        # shooting_number가 누락되었을 때 무조건 1로 저장하지 않고 실제 촬영 회차 조회
+        actual_shooting_number = req.shooting_number
+        if not actual_shooting_number:
+            latest_path = db.query(ShootingPath).filter(
+                ShootingPath.project_id == project_id
+            )
+            if current_user:
+                latest_path = latest_path.filter(ShootingPath.user_id == user_id)
+            latest_path = latest_path.order_by(ShootingPath.shooting_number.desc()).first()
+            if latest_path and latest_path.shooting_number:
+                actual_shooting_number = latest_path.shooting_number
+            else:
+                latest_analysis = db.query(ShootingAnalysis).filter(
+                    ShootingAnalysis.project_id == project_id
+                ).order_by(ShootingAnalysis.created_at.desc()).first()
+                if latest_analysis and latest_analysis.target_coordinates and isinstance(latest_analysis.target_coordinates, dict):
+                    an_s_num = latest_analysis.target_coordinates.get("shooting_number")
+                    if an_s_num:
+                        actual_shooting_number = int(an_s_num)
+            if not actual_shooting_number:
+                actual_shooting_number = 1
+
         res = technique_service.record_technique_feedback(
             db=db,
             user_id=user_id,
             project_id=project_id,
             technique_id=req.technique_id,
-            shooting_number=req.shooting_number or 1,
+            shooting_number=actual_shooting_number,
             was_shot=req.was_shot,
             satisfaction_score=req.satisfaction_score,
             comment=req.comment

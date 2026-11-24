@@ -35,6 +35,8 @@ drone_filght/backend/.env
 # Database
 *.db
 *.sqlite3
+*.bak
+*.bak_*
 !drone_filght/backend/sky_command_demo.db
 
 # Uploads

@@ -3,14 +3,14 @@ import io
 import json
 import math
 import re
-from datetime import datetime
-from typing import Dict, Any, Optional, Tuple, List
+from datetime import datetime, timezone
+from typing import Dict, Any, Optional, Tuple, List, Union
 from PIL import Image
 import numpy as np
 from sqlalchemy.orm import Session
 
 from backend.config import settings
-from backend.models.models import User, ShootingAnalysis, ShootingProject
+from backend.models.models import User, ShootingAnalysis, ShootingProject, LocationAsset, UserPreferenceScore
 from backend.schemas.schemas import (
     AIChatbotGroundTruthRequest,
     AIChatbotGroundTruthResponse,
@@ -587,6 +587,84 @@ class AIService:
                 "sky_ratio": 0.42
             }
 
+    @staticmethod
+    def calculate_gps_distance_and_bearing(
+        lat1: float, lon1: float, lat2: float, lon2: float
+    ) -> Tuple[float, float, str]:
+        """
+        [Phase 10] 두 GPS 좌표 간의 정밀 구면 Haversine 거리(m) 및 전방 방위각(Bearing, 0~360°), 8방위명 산출
+        (순수 구면 삼각법 기하 수식 기반 계산, AI 환각 및 추측 원천 배제)
+        """
+        R = 6371000.0  # 지구 반지름 (미터)
+        phi1 = math.radians(lat1)
+        phi2 = math.radians(lat2)
+        delta_phi = math.radians(lat2 - lat1)
+        delta_lambda = math.radians(lon2 - lon1)
+
+        # Haversine 거리
+        a = math.sin(delta_phi / 2.0) ** 2 + math.cos(phi1) * math.cos(phi2) * (math.sin(delta_lambda / 2.0) ** 2)
+        c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(max(0.0, 1.0 - a)))
+        distance = round(R * c, 2)
+
+        # 전방 방위각 (Forward Azimuth / Bearing)
+        y = math.sin(delta_lambda) * math.cos(phi2)
+        x = math.cos(phi1) * math.sin(phi2) - (math.sin(phi1) * math.cos(phi2) * math.cos(delta_lambda))
+        raw_bearing = math.degrees(math.atan2(y, x))
+        bearing = round((raw_bearing + 360.0) % 360.0, 1)
+
+        # 8방위 문자열
+        cardinals = ["북", "북동", "동", "남동", "남", "남서", "서", "북서"]
+        idx = int((bearing + 22.5) / 45.0) % 8
+        cardinal = cardinals[idx]
+
+        return distance, bearing, cardinal
+
+    @classmethod
+    def _check_gps_freshness(cls, current_timestamp: Any, max_age_seconds: float = 15.0) -> Tuple[bool, float]:
+        """
+        [Phase 10] 스마트폰 GPS 수신 시각의 유효성 및 경과 시간(초) 확인:
+        - ISO 8601 문자열 및 Epoch 초/밀리초 완벽 지원
+        - 15초 초과 노후 데이터 감지 시 이동 안내 안전 차단 (거리/방위각 Null 처리)
+        - 반환: (is_fresh, age_seconds)
+        """
+        if not current_timestamp:
+            return True, 0.0  # 타임스탬프 미제공 시 최신성 검사는 통과 (호환성 유지)
+        now_utc = datetime.now(timezone.utc)
+        ts_dt = None
+        try:
+            if isinstance(current_timestamp, (int, float)):
+                val = float(current_timestamp)
+                if val > 1e11:  # epoch ms
+                    val /= 1000.0
+                ts_dt = datetime.fromtimestamp(val, tz=timezone.utc)
+            elif isinstance(current_timestamp, str):
+                s = current_timestamp.strip()
+                if s.replace(".", "", 1).isdigit():
+                    val = float(s)
+                    if val > 1e11:
+                        val /= 1000.0
+                    ts_dt = datetime.fromtimestamp(val, tz=timezone.utc)
+                else:
+                    if s.endswith("Z"):
+                        s = s[:-1] + "+00:00"
+                    parsed = datetime.fromisoformat(s)
+                    if parsed.tzinfo is None:
+                        ts_dt = parsed.replace(tzinfo=timezone.utc)
+                    else:
+                        ts_dt = parsed.astimezone(timezone.utc)
+        except Exception:
+            return False, 999.0
+
+        if ts_dt is None:
+            return True, 0.0
+
+        age_sec = (now_utc - ts_dt).total_seconds()
+        # 미래 시간 오차 허용 (최대 60초 앞서는 것은 단말 시계 오차 허용)
+        if age_sec < -60.0:
+            return False, abs(age_sec)
+        is_fresh = (age_sec <= max_age_seconds)
+        return is_fresh, max(0.0, age_sec)
+
     @classmethod
     def analyze_scene_and_recommend(
         cls,
@@ -596,6 +674,12 @@ class AIService:
         current_pitch: float = -15.0,
         current_roll: float = 0.0,
         current_heading: Optional[float] = None,
+        current_lat: Optional[float] = None,
+        current_lng: Optional[float] = None,
+        current_accuracy: Optional[float] = None,
+        current_timestamp: Optional[Union[str, float, int]] = None,
+        consecutive_arrival_count: Optional[int] = 0,
+        current_waypoint_seq: Optional[int] = None,
         project_id: int = 1,
         shooting_number: Optional[int] = 1,
         current_user: Optional[User] = None,
@@ -603,23 +687,203 @@ class AIService:
         db: Optional[Session] = None
     ) -> AnalyzeResponse:
         """
-        [Phase 4] AI 촬영 장면 분석 및 구도 추천 종합 처리 엔진:
-        1. 스마트폰 카메라 프레임 수신 (Gemini API 멀티모달 최우선 시도, 키 미설정/실패 시 CV 규칙 엔진 자동 전환)
-        2. 주요 피사체 탐지 (종류, 위치, 점유율 크기)
-        3. 배경 및 주변 환경 특징 추출 (조도, 환경 타입, 수평선)
-        4. 수평선 및 화면 균형 (스마트폰 롤 각도 연동)
-        5. 촬영 목적 및 피사체 맞춤 구도 추천 (중앙, 삼분할, 대칭, 리딩라인, 전경, 여백 등)
-        6. 목표 위치와 현재 위치의 오차(offset_x, offset_y, distance) 및 실시간 보정 방향 안내
-        7. 분석 결과 DB(shooting_analyses) 저장 (사용자 ID, 프로젝트 ID, 회차 연계)
+        [Phase 10] AI 기반 실시간 촬영 방향 및 구도 추천 통합 엔진:
+        1. 4가지 핵심 데이터 통합 (프로젝트 정보, 장소 자료, 경로 동선, 사용자 선호도)
+        2. 실시간 스마트폰 카메라 프레임 분석 (Gemini Vision 시도 -> 실패/부재 시 PIL/NumPy Fallback)
+        3. 촬영 방향 안내(Shooting Guide: 프레임 상하좌우/수평) vs 보행 이동 안내(Walking Guide: GPS 거리/방위각) 엄격 분리
+        4. 초록색 프레임(.live.ready) 활성화 조건: 카메라 구도 및 수평도 일치 시 즉시 활성화 (보행 도달 여부에 종속되지 않음)
+        5. 분석 결과 DB(shooting_analyses) 저장 (분석 로그, 지침문, 4대 데이터 컨텍스트 연계)
         """
-        source_label = "AI 시네마틱 컴퓨터 비전 규칙 엔진"
-        gemini_parsed: Optional[Dict[str, Any]] = None
+        # =====================================================================
+        # Step 1. 4가지 핵심 데이터 결합 조회 (DB 연동)
+        # =====================================================================
+        project_data: Dict[str, Any] = {}
+        location_asset_data: Dict[str, Any] = {"asset_count": 0, "summary": "사전 등록 자료 없음", "matched_poi_name": None}
+        path_data: Dict[str, Any] = {"is_personalized": False, "variation_type": None, "common_version": None, "total_waypoints": 0}
+        user_pref_data: Dict[str, Any] = {"top_technique": None, "top_score": 0.0, "has_preference": False}
+        rec_waypoints: List[Dict[str, Any]] = []
 
-        # 1. Google Gemini Multimodal Vision API 시도 (환경변수 키가 설정되어 있을 때)
+        if db and project_id:
+            # ① 촬영 프로젝트 정보 (ShootingProject)
+            proj = db.query(ShootingProject).filter(ShootingProject.id == project_id).first()
+            if proj:
+                project_data = {
+                    "id": proj.id,
+                    "title": proj.title or proj.project_name or "촬영 프로젝트",
+                    "place_name": proj.place_name or proj.shooting_location or "현장",
+                    "scene_intent": scene_intent or proj.scene_intent or "자연 및 도심 시네마틱 촬영",
+                    "recommended_mode": proj.recommended_mode,
+                    "desired_techniques": proj.desired_techniques or [],
+                    "target_time": proj.target_time or "주간"
+                }
+                if not scene_intent:
+                    scene_intent = proj.scene_intent
+
+            # ② 촬영 장소 자료 (LocationAsset - 사전 등록된 이미지/영상 피사체 메타데이터 재활용)
+            loc_assets = db.query(LocationAsset).filter(LocationAsset.project_id == project_id).all()
+            if loc_assets:
+                matched_poi = None
+                features_list = []
+                for a in loc_assets:
+                    feat = a.detected_features or {}
+                    if isinstance(feat, dict):
+                        t = feat.get("title") or feat.get("name") or a.asset_type
+                        if not matched_poi and t:
+                            matched_poi = t
+                        features_list.append(f"{a.asset_type}({t})")
+                location_asset_data = {
+                    "asset_count": len(loc_assets),
+                    "summary": ", ".join(features_list[:3]),
+                    "matched_poi_name": matched_poi
+                }
+
+            # ③ 촬영 경로 데이터 (Phase 8 공통 & Phase 9 맞춤 통합 경로)
+            try:
+                from backend.services.path_service import path_service
+                user_id_val = current_user.id if current_user else None
+                path_rec = path_service.get_next_round_recommendation(db=db, project_id=project_id, user_id=user_id_val)
+                rec_waypoints = path_rec.get("recommended_waypoints") or []
+                path_data = {
+                    "is_personalized": path_rec.get("is_personalized", False),
+                    "variation_type": path_rec.get("personalized_variation_type"),
+                    "common_version": path_rec.get("common_path_version"),
+                    "total_waypoints": len(rec_waypoints),
+                    "source_info": path_rec.get("source_info")
+                }
+            except Exception:
+                rec_waypoints = []
+
+            # ④ 사용자 선호도 데이터 (UserPreferenceScore)
+            if current_user:
+                try:
+                    user_prefs = db.query(UserPreferenceScore).filter(
+                        UserPreferenceScore.user_id == current_user.id,
+                        UserPreferenceScore.category == "technique"
+                    ).order_by(UserPreferenceScore.preference_score.desc()).all()
+                    if user_prefs:
+                        user_pref_data = {
+                            "top_technique": user_prefs[0].preference_value,
+                            "top_score": float(user_prefs[0].preference_score),
+                            "has_preference": True
+                        }
+                except Exception:
+                    pass
+
+        # =====================================================================
+        # Step 2. 보행 이동 안내 (Walking Movement Guide) 순수 기하 수식 계산 및 안전 검증
+        # =====================================================================
+        target_seq = current_waypoint_seq or 1
+        target_wp = None
+        if rec_waypoints:
+            matched = [w for w in rec_waypoints if w.get("seq") == target_seq]
+            if matched:
+                target_wp = matched[0]
+            else:
+                idx = min(max(0, target_seq - 1), len(rec_waypoints) - 1)
+                target_wp = rec_waypoints[idx]
+                target_seq = target_wp.get("seq", target_seq)
+
+        # GPS 정확도 및 최신성 검증 (Phase 6 정확도 필터 기준 및 15초 제한)
+        is_gps_accuracy_valid = True
+        gps_accuracy_error = None
+        if current_accuracy is not None and float(current_accuracy) > 20.0:
+            is_gps_accuracy_valid = False
+            gps_accuracy_error = f"⚠️ GPS 수신 정확도 저하 (오차 ±{int(current_accuracy)}m > 20m). 야외 트인 곳으로 이동해 주세요."
+
+        is_gps_fresh = True
+        gps_freshness_error = None
+        if current_timestamp:
+            is_fresh, age_sec = cls._check_gps_freshness(current_timestamp)
+            if not is_fresh:
+                is_gps_fresh = False
+                gps_freshness_error = f"⚠️ GPS 위치 정보 지연 ({int(age_sec)}초 경과 > 15초). 실시간 GPS 신호 갱신 대기 중..."
+
+        is_gps_usable = (is_gps_accuracy_valid and is_gps_fresh)
+
+        walking_guide: Dict[str, Any] = {
+            "target_waypoint_seq": target_seq,
+            "total_waypoints": len(rec_waypoints),
+            "distance_m": None,
+            "bearing_deg": None,
+            "bearing_cardinal": None,
+            "is_waypoint_reached": False,
+            "is_near_waypoint": False,
+            "consecutive_arrival_count": 0,
+            "current_accuracy": current_accuracy,
+            "is_gps_usable": is_gps_usable,
+            "walking_message": "스마트폰 GPS 신호 수신 대기 중 (보행 동선 준비)",
+            "safety_notice": "⚠️ [보행 안전 주의] 이동 시 화면만 보지 마시고 전방 지형 및 주변 환경을 육안으로 확인하세요. (경로 안전성은 자동 검증되지 않음)",
+            "target_lat": target_wp.get("lat") if target_wp else None,
+            "target_lng": target_wp.get("lng") if target_wp else None
+        }
+
+        if current_lat is not None and current_lng is not None and target_wp and target_wp.get("lat") and target_wp.get("lng"):
+            if not is_gps_accuracy_valid:
+                # GPS 정확도가 20m를 초과하면 거리 및 방위각 계산 중단, 안내 메시지 출력
+                walking_guide.update({
+                    "walking_message": gps_accuracy_error,
+                    "distance_m": None,
+                    "bearing_deg": None,
+                    "bearing_cardinal": None,
+                    "is_waypoint_reached": False,
+                    "is_near_waypoint": False,
+                    "consecutive_arrival_count": 0
+                })
+            elif not is_gps_fresh:
+                # GPS 좌표가 15초 이상 지연된 경우 이동 안내 중단, 안내 메시지 출력
+                walking_guide.update({
+                    "walking_message": gps_freshness_error,
+                    "distance_m": None,
+                    "bearing_deg": None,
+                    "bearing_cardinal": None,
+                    "is_waypoint_reached": False,
+                    "is_near_waypoint": False,
+                    "consecutive_arrival_count": 0
+                })
+            else:
+                # GPS 정상: 거리·방위각 계산 및 2.5m 이내 2회 이상 연속 관측 시에만 도착 확정 (Debounce)
+                d_m, b_deg, b_card = cls.calculate_gps_distance_and_bearing(
+                    float(current_lat), float(current_lng),
+                    float(target_wp["lat"]), float(target_wp["lng"])
+                )
+                is_near = (d_m <= 2.5)
+                new_consecutive = (consecutive_arrival_count or 0) + 1 if is_near else 0
+                is_reached = bool(is_near and new_consecutive >= 2)
+
+                if is_reached:
+                    w_msg = f"목표 {target_seq}번 지점 반경({d_m:.1f}m) 내 도착 완료! 다음 지점으로 이동하거나 안정된 자세로 촬영하세요."
+                elif is_near:
+                    w_msg = f"목표 {target_seq}번 지점 반경({d_m:.1f}m) 접근 중... (도착 확인 관측 1/2회)"
+                else:
+                    w_msg = f"다음 {target_seq}번 웨이포인트를 향해 {b_card}({int(b_deg)}°) 방향으로 약 {d_m:.1f}m 보행 이동하세요."
+
+                walking_guide.update({
+                    "distance_m": d_m,
+                    "bearing_deg": b_deg,
+                    "bearing_cardinal": b_card,
+                    "is_near_waypoint": is_near,
+                    "consecutive_arrival_count": new_consecutive,
+                    "is_waypoint_reached": is_reached,
+                    "walking_message": w_msg
+                })
+
+        # =====================================================================
+        # Step 3. 카메라 프레임 분석 (Gemini Vision 시도 -> CV Fallback)
+        # =====================================================================
+        source_label = "컴퓨터 비전 규칙 엔진 (PIL+NumPy 에지 분석, 의미 인식 제한)"
+        gemini_parsed: Optional[Dict[str, Any]] = None
+        is_semantic_recognized = False
+
+        # Google Gemini Multimodal Vision API 시도
         if image_base64 and getattr(settings, "GEMINI_API_KEY", ""):
             prompt = f"""
 당신은 항공촬영 및 시네마토그래피 전문 AI 감독입니다.
-현재 촬영 목적은 '{purpose}'이며, 기획 의도는 '{scene_intent or "도시 및 자연 시네마틱 촬영"}'입니다.
+현재 촬영 프로젝트 종합 컨텍스트:
+- 프로젝트: {project_data.get('title', '시네마틱 프로젝트')} (장소: {project_data.get('place_name', '현장')})
+- 기획 의도: '{scene_intent or "도시 및 자연 시네마틱 촬영"}'
+- 촬영 목적(기법): '{purpose}' (사용자 최상위 선호 기법: '{user_pref_data.get('top_technique') or purpose}')
+- 사전 등록 장소 특징: {location_asset_data.get('summary', '특징 정보 없음')} (연계 피사체: {location_asset_data.get('matched_poi_name', '일반 피사체')})
+
 스마트폰 후면 카메라에서 캡처된 이 장면을 정밀 분석하여 다음 JSON 스키마로만 엄격히 응답하십시오:
 {{
   "subject": {{
@@ -664,10 +928,11 @@ class AIService:
                     if "subject" in parsed and "composition" in parsed:
                         gemini_parsed = parsed
                         source_label = f"Google Gemini API ({model_used})"
+                        is_semantic_recognized = True
             except Exception:
                 gemini_parsed = None
 
-        # 2. Gemini 결과가 없거나 실패 시 컴퓨터 비전(PIL + NumPy) 엔진으로 안전 처리
+        # 컴퓨터 비전 (PIL + NumPy) 에지 분석
         _, cv_data = cls._extract_cv_scene_features(image_base64)
 
         if gemini_parsed:
@@ -698,28 +963,13 @@ class AIService:
             target_x = float(comp_raw.get("target_x", 0.0))
             target_y = float(comp_raw.get("target_y", 0.0))
         else:
-            # 규칙 기반 정밀 분류
-            clean_intent = (scene_intent or "").strip()
-            if any(k in clean_intent for k in ["건물", "도시", "빌딩", "스카이라인", "아파트"]):
-                subject_type = "건물"
-                subject_name = "도심 스카이라인 및 건축물"
-                env_type = "도심 건축 공간"
-                env_summary = "고층 빌딩 및 구조물이 입체적인 원근감을 형성하는 도심 환경"
-            elif any(k in clean_intent for k in ["인물", "사람", "모델", "러너", "워킹"]):
-                subject_type = "사람"
-                subject_name = "보행 및 활동 인물"
-                env_type = "야외 인물 촬영 환경"
-                env_summary = "활동적인 인물이 배경과 조화를 이루는 현장 환경"
-            elif any(k in clean_intent for k in ["차량", "자동차", "도로", "드라이브"]):
-                subject_type = "차량"
-                subject_name = "도로 및 주행 차량"
-                env_type = "도심 및 간선 도로망"
-                env_summary = "선형 도로와 차량 이동 동선이 펼쳐진 환경"
-            else:
-                subject_type = "자연/수면"
-                subject_name = "수변 풍경 및 수평선"
-                env_type = "수변 생태 공원"
-                env_summary = "넓게 트인 수면과 하늘이 평화로운 분위기를 자아내는 자연 환경"
+            # Fallback 규칙 기반 처리 (실제 피사체 의미 인식 불가함을 명시)
+            is_semantic_recognized = False
+            source_label = "컴퓨터 비전 규칙 엔진 (PIL+NumPy 에지 분석, 의미 인식 제한)"
+            subject_type = "미상 피사체"
+            subject_name = "화면 내 에지 에너지 중심 검출 영역 (의미 인식 제한)"
+            env_type = "현장 조도 및 수평 분석"
+            env_summary = "조도 및 수평선 그래디언트 기반 기하학적 분석 (장소 의미 인식 제한)"
 
             subject_cx = cv_data["subject_center_x"]
             subject_cy = cv_data["subject_center_y"]
@@ -732,50 +982,44 @@ class AIService:
             horizon_tilt = cv_data["horizon_tilt"]
             balance_status = "LEFT_HEAVY" if subject_cx < 0.4 else ("RIGHT_HEAVY" if subject_cx > 0.6 else "BALANCED")
 
-            # 촬영 목적(purpose) 및 기법 맞춤 구도 선정
-            p_lower = (purpose or "orbit").lower()
-            if p_lower == "thirds":
+            # 촬영 목적 및 선호 기법 반영 목표 구도 결정
+            effective_tech = user_pref_data.get("top_technique") or purpose
+            p_lower = str(effective_tech).lower()
+            if any(k in p_lower for k in ["thirds", "rule_of_thirds", "golden"]):
                 rec_name = "3x3 삼분할 황금비율 구도 (Rule of Thirds)"
                 rec_reason = "피사체와 배경 여백을 1:2 황금비율로 배치하여 시선의 여유와 역동적인 안정감을 극대화합니다."
                 target_x = 0.33 if subject_cx >= 0.5 else -0.33
                 target_y = 0.0
-            elif p_lower == "dronie":
+            elif any(k in p_lower for k in ["dronie", "leading_line", "flyover"]):
                 rec_name = "리딩라인 소실점 구도 (Leading Lines)"
-                rec_reason = "선형 지형의 소실점과 피사체를 직선 비행 경로에 일치시켜 속도감과 웅장한 원근감을 부여합니다."
+                rec_reason = "선형 지형의 소실점과 피사체를 직선 보행 경로에 일치시켜 원근감을 부여합니다."
                 target_x = 0.0
                 target_y = 0.20
-            elif p_lower == "landscape":
+            elif any(k in p_lower for k in ["landscape", "horizon", "negative_space"]):
                 rec_name = "수평선 0도 랜드스케이프 구도 (Negative Space)"
                 rec_reason = "수평선을 하단 1/3 지점에 반듯하게 배치하고 상단 하늘 여백을 시원하게 조망하기에 최적입니다."
                 target_x = 0.0
                 target_y = 0.33
-            elif any(k in clean_intent for k in ["대칭", "반영", "거울", "다리"]):
+            elif any(k in p_lower for k in ["symmetry", "reflect", "대칭"]):
                 rec_name = "좌우 대칭 밸런스 구도 (Symmetry Framing)"
                 rec_reason = "피사체 좌우 여백의 균형을 정밀하게 맞추어 정갈하고 집중도 높은 시각적 완성도를 제공합니다."
                 target_x = 0.0
                 target_y = 0.0
-            elif any(k in clean_intent for k in ["나무", "창문", "프레임"]):
-                rec_name = "전경 프레이밍 구도 (Foreground Framing)"
-                rec_reason = "앞쪽 전경 요소를 자연스러운 액자로 활용하여 깊이감 있는 3차원 공간감을 연출합니다."
-                target_x = 0.0
-                target_y = 0.10
             else:
                 rec_name = "중앙 배치 구도 (Center Framing)"
-                rec_reason = "피사체를 화면 정중앙에 락온하여 360도 회전 궤적을 왜곡 없이 매끄럽게 포착하기 적합합니다."
+                rec_reason = "피사체를 화면 정중앙에 락온하여 부드러운 궤적을 왜곡 없이 포착하기 적합합니다."
                 target_x = 0.0
                 target_y = 0.0
 
-        # 3. 현재 피사체 위치와 추천 구도 목표 위치 간 오차(Offset) 및 거리 계산
-        # 정규화 좌표계 변환: 0.0~1.0 -> -1.0~1.0 (중심 0,0)
+        # =====================================================================
+        # Step 4. 촬영 방향 안내 (Shooting Guide) 및 초록색 프레임 판정
+        # =====================================================================
         curr_x_norm = round((subject_cx - 0.5) * 2.0, 3)
         curr_y_norm = round((subject_cy - 0.5) * 2.0, 3)
-
         offset_x = round(curr_x_norm - target_x, 3)
         offset_y = round(curr_y_norm - target_y, 3)
         dist = round(math.hypot(offset_x, offset_y), 3)
 
-        # 4. 스마트폰 센서(Roll 각도)와 결합한 실시간 조종 가이드 판정 (Requirement 5)
-        # 스마트폰 롤 각도가 ±4도 초과 시 수평선 기울어짐 경고
         effective_roll = current_roll if abs(current_roll) > 0.5 else horizon_tilt
         is_level = abs(effective_roll) <= 4.0
 
@@ -816,7 +1060,10 @@ class AIService:
                     guide_message = "피사체가 하단으로 치우쳤습니다. 카메라를 ⬇️ 아래쪽으로 내리세요."
                 else:
                     guide_direction = "up"
-                    guide_message = "고도가 낮거나 피사체가 상단에 있습니다. 카메라를 ⬆️ 위쪽으로 올리세요."
+                    guide_message = "카메라가 낮거나 피사체가 상단에 있습니다. 카메라를 ⬆️ 위쪽으로 올리세요."
+
+        # 초록색 프레임 조건: 현재 카메라 구도 및 수평도 적합 여부로만 결정 (보행 이동에 종속되지 않음)
+        is_ready = bool(is_aligned and is_level)
 
         subject_dict = {
             "type": subject_type,
@@ -824,7 +1071,8 @@ class AIService:
             "position": {"x": curr_x_norm, "y": curr_y_norm},
             "occupancy_ratio": occupancy,
             "size_status": size_status,
-            "bounding_box": bounding_box
+            "bounding_box": bounding_box,
+            "is_semantic_recognized": is_semantic_recognized
         }
 
         env_dict = {
@@ -840,7 +1088,30 @@ class AIService:
             }
         }
 
-        # 5. 분석 결과 DB(shooting_analyses) 저장 (Requirement 4)
+        shooting_guide = {
+            "guide_direction": guide_direction,
+            "offset_x": offset_x,
+            "offset_y": offset_y,
+            "distance": dist,
+            "is_aligned": is_aligned,
+            "is_level": is_level,
+            "horizon_tilt_deg": effective_roll,
+            "message": guide_message,
+            "target_position": {"target_x": target_x, "target_y": target_y}
+        }
+
+        context_info = {
+            "project_info": project_data,
+            "location_asset_info": location_asset_data,
+            "path_info": path_data,
+            "user_preference_info": user_pref_data,
+            "is_semantic_recognized": is_semantic_recognized,
+            "integrated_at": datetime.utcnow().isoformat()
+        }
+
+        # =====================================================================
+        # Step 5. 분석 결과 DB(shooting_analyses) 저장
+        # =====================================================================
         saved_analysis_id = None
         if save_to_db and db:
             try:
@@ -855,6 +1126,9 @@ class AIService:
                     "guide_direction": guide_direction,
                     "is_aligned": is_aligned,
                     "horizon_tilt_deg": effective_roll,
+                    "shooting_guide": shooting_guide,
+                    "walking_guide": walking_guide,
+                    "context_info": context_info,
                     "subject_details": subject_dict,
                     "environment_details": env_dict,
                     "source": source_label
@@ -881,7 +1155,7 @@ class AIService:
         return AnalyzeResponse(
             project_id=project_id,
             frame_score=frame_score,
-            is_ready=is_aligned,
+            is_ready=is_ready,
             guide_direction=guide_direction,
             offset_x=offset_x,
             offset_y=offset_y,
@@ -896,7 +1170,10 @@ class AIService:
             analysis_id=saved_analysis_id,
             shooting_number=shooting_number or 1,
             user_id=current_user.id if current_user else None,
-            source=source_label
+            source=source_label,
+            walking_guide=walking_guide,
+            shooting_guide=shooting_guide,
+            context_info=context_info
         )
 
 ai_service = AIService()
