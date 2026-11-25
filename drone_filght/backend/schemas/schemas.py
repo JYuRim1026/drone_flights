@@ -122,8 +122,25 @@ class ShootingProjectCreate(BaseModel):
     recommended_mode: Optional[str] = "패럴랙스 리빌 & 선셋 아크"
     recommended_shutter: Optional[str] = "1/50s"
     recommended_nd_filter: Optional[str] = "ND16"
-    desired_techniques: Optional[List[str]] = Field(default_factory=list, description="사용자 희망 촬영 기법 목록")
+    desired_techniques: Optional[List[str]] = Field(default_factory=list, description="사용자 희망/선호 촬영 기법 목록")
     recommended_techniques: Optional[List[str]] = Field(default_factory=list, description="AI 추천 촬영 기법 목록")
+    shooting_purpose: Optional[str] = Field(None, description="촬영 목적 (여행·관광, 홍보, 자연풍경 등)")
+    preferred_technique: Optional[str] = Field(None, description="사용자 선호 단일 촬영 기법 (FORWARD, LATERAL 등)")
+    additional_notes: Optional[str] = Field(None, description="기타 추가 연출 요청 및 제약사항")
+
+class ShootingProjectUpdate(BaseModel):
+    title: Optional[str] = None
+    place_name: Optional[str] = None
+    target_date: Optional[str] = None
+    target_time: Optional[str] = None
+    shooting_purpose: Optional[str] = None
+    desired_techniques: Optional[List[str]] = None
+    preferred_technique: Optional[str] = None
+    additional_notes: Optional[str] = None
+    scene_intent: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    status: Optional[str] = None
 
 class ShootingProjectResponse(ShootingProjectCreate):
     id: int
@@ -132,6 +149,9 @@ class ShootingProjectResponse(ShootingProjectCreate):
     status: str
     created_at: datetime
     project_code: Optional[str] = None
+    shooting_purpose: Optional[str] = None
+    project_name: Optional[str] = None
+    shooting_location: Optional[str] = None
     class Config:
         from_attributes = True
 

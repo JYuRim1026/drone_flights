@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#10233f">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>스카이 커맨드 | AI 드론 비행 안전 & 드론원스톱 승인 도우미</title>
 <!-- Leaflet Map CSS & JS for Interactive Airspace Map -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -1663,16 +1666,118 @@ button { cursor: pointer; }
           </div>
         </div>
 
-        <!-- [Image 2 Table Item 1] 촬영 의도 분석 -> 최상단 메인 입력 영역 -->
-        <div class="airaxis-search-card">
-          <div style="font-size:13px; font-weight:800; color:var(--navy); margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
-            <span>🎬 촬영 의도 및 조건 분석 (최상단 메인 입력 영역)</span>
-            <span style="font-size:11px; color:var(--muted); font-weight:normal;">자연어 문장 또는 키워드 입력</span>
+        <!-- [6개 독립 박스] 촬영 프로젝트 작성 화면 -->
+        <div class="airaxis-search-card" id="projectCreateCard" style="margin-bottom:20px; padding:20px 24px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid #f1f5f9; padding-bottom:12px; flex-wrap:wrap; gap:10px;">
+            <div>
+              <div style="font-size:16px; font-weight:800; color:var(--navy); display:flex; align-items:center; gap:8px;">
+                <span>🎬 촬영 프로젝트 작성</span>
+                <span style="font-size:11px; background:#eff6ff; color:#1d4ed8; font-weight:700; padding:3px 10px; border-radius:12px;">6대 필수·선택 설정</span>
+              </div>
+              <p style="font-size:12px; color:var(--muted); margin:4px 0 0 0;">촬영 장소, 목적, 일정 및 선호 기법을 직관적으로 입력하여 실시간 연동 프로젝트를 생성합니다.</p>
+            </div>
+            <div>
+              <button type="button" id="btnCreateProjectAction" class="airaxis-btn-primary" style="padding:10px 18px; font-weight:700;">
+                ✨ 촬영 프로젝트 등록 &amp; QR 발급
+              </button>
+            </div>
           </div>
-          <div class="search-bar-wrap" style="margin-bottom:0;">
-            <input type="text" id="cinemaQueryInput" class="search-input" placeholder="원하는 촬영 장소, 목적 및 조건 등을 자유롭게 입력하세요 (예: 서울 여의도 한강공원 일몰 촬영, 부산 해운대 해변, 제주 성산일출봉 액션)" value="">
-            <button id="cinemaSearchBtn" class="search-btn">🔍 촬영 의도 분석하기</button>
+
+          <div class="project-boxes-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:16px;">
+            
+            <!-- ① 촬영 장소 -->
+            <div class="project-input-box" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <label for="projInputLocation" style="font-size:13px; font-weight:800; color:var(--navy); display:flex; align-items:center; gap:6px;">
+                  <span>📍 ① 촬영 장소</span>
+                  <span style="color:#ef4444; font-size:12px;">*</span>
+                </label>
+                <span style="font-size:11px; color:#64748b;">상세 주소 또는 명칭</span>
+              </div>
+              <div style="display:flex; gap:6px;">
+                <input type="text" id="projInputLocation" class="form-input" placeholder="예: 경복궁 근정전 앞 광장, 여의도 한강공원" value="서울 여의도 한강공원" style="flex:1; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; background:#fff;">
+                <button type="button" id="btnSearchProjLoc" style="padding:0 12px; border-radius:8px; font-size:12px; font-weight:700; background:#e2e8f0; color:#334155; border:none; cursor:pointer;" title="기존 지도 검색 연동">🔍 지도연동</button>
+              </div>
+              <div id="projLocGpsHint" style="font-size:11px; color:#64748b; margin-top:6px; display:flex; justify-content:space-between;">
+                <span id="projLocCoordsText">위치 좌표: 37.5284, 126.9328</span>
+                <span style="color:#059669; font-weight:700;">● GPS 준비완료</span>
+              </div>
+            </div>
+
+            <!-- ② 촬영 목적 -->
+            <div class="project-input-box" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <label for="projSelectPurpose" style="font-size:13px; font-weight:800; color:var(--navy);">🎯 ② 촬영 목적</label>
+                <span style="font-size:11px; color:#64748b;">카테고리 선택</span>
+              </div>
+              <select id="projSelectPurpose" style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; background:#fff; color:#1e293b;">
+                <option value="여행·관광 기록">여행·관광 기록</option>
+                <option value="홍보·마케팅">홍보·마케팅</option>
+                <option value="자연·풍경 촬영" selected>자연·풍경 촬영</option>
+                <option value="건축물·문화재 기록">건축물·문화재 기록</option>
+                <option value="영상 콘텐츠 제작">영상 콘텐츠 제작</option>
+                <option value="개인 창작·취미">개인 창작·취미</option>
+                <option value="기타">기타 (직접 입력)</option>
+              </select>
+              <input type="text" id="projInputPurposeCustom" placeholder="기타 촬영 목적을 직접 입력하세요" style="display:none; width:100%; margin-top:8px; padding:8px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:12px; background:#fff; box-sizing:border-box;">
+            </div>
+
+            <!-- ③ 촬영 예정일 -->
+            <div class="project-input-box" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <label for="projInputDate" style="font-size:13px; font-weight:800; color:var(--navy);">📅 ③ 촬영 예정일</label>
+                <span style="font-size:11px; color:#64748b;">날짜 선택</span>
+              </div>
+              <input type="date" id="projInputDate" style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; background:#fff; color:#1e293b; box-sizing:border-box;">
+              <div style="font-size:11px; color:#64748b; margin-top:6px;">비행 승인 및 기상청 예보 기준일로 사용됩니다.</div>
+            </div>
+
+            <!-- ④ 촬영 시간 -->
+            <div class="project-input-box" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <label style="font-size:13px; font-weight:800; color:var(--navy);">⏰ ④ 촬영 시간 (시작 ~ 종료)</label>
+                <span id="projTimeValidationBadge" style="font-size:11px; color:#059669; font-weight:700;">● 정상 (2시간)</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <input type="time" id="projInputStartTime" value="15:00" style="flex:1; padding:9px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; background:#fff; color:#1e293b;">
+                <span style="color:#64748b; font-weight:700;">~</span>
+                <input type="time" id="projInputEndTime" value="17:00" style="flex:1; padding:9px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; background:#fff; color:#1e293b;">
+              </div>
+              <div id="projTimeValidationMsg" style="font-size:11px; color:#64748b; margin-top:6px;">예: 15:00 ~ 17:00 (일몰 골든아워)</div>
+            </div>
+
+            <!-- ⑤ 촬영 기법 -->
+            <div class="project-input-box" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <label style="font-size:13px; font-weight:800; color:var(--navy);">🎬 ⑤ 선호 촬영 기법 (선택 입력)</label>
+                <span id="projTechCountBadge" style="font-size:11px; color:#1d4ed8; font-weight:700;">1개 선택됨</span>
+              </div>
+              <div class="technique-chips-wrap" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px;">
+                <button type="button" class="technique-chip active" data-tech="FORWARD" style="padding:6px 10px; border-radius:16px; border:1px solid #3b82f6; font-size:11px; font-weight:700; background:#eff6ff; color:#1d4ed8; cursor:pointer;">FORWARD (전진)</button>
+                <button type="button" class="technique-chip" data-tech="LATERAL" style="padding:6px 10px; border-radius:16px; border:1px solid #cbd5e1; font-size:11px; font-weight:700; background:#fff; color:#475569; cursor:pointer;">LATERAL (측면)</button>
+                <button type="button" class="technique-chip" data-tech="DIAGONAL_REVEAL" style="padding:6px 10px; border-radius:16px; border:1px solid #cbd5e1; font-size:11px; font-weight:700; background:#fff; color:#475569; cursor:pointer;">DIAGONAL_REVEAL (사선)</button>
+                <button type="button" class="technique-chip" data-tech="ORBIT" style="padding:6px 10px; border-radius:16px; border:1px solid #cbd5e1; font-size:11px; font-weight:700; background:#fff; color:#475569; cursor:pointer;">ORBIT (오비트)</button>
+                <button type="button" class="technique-chip" data-tech="PANORAMA" style="padding:6px 10px; border-radius:16px; border:1px solid #cbd5e1; font-size:11px; font-weight:700; background:#fff; color:#475569; cursor:pointer;">PANORAMA (파노라마)</button>
+              </div>
+              <div id="projTechNotice" style="font-size:11px; color:#64748b; line-height:1.4;">
+                ※ 미선택 시 현장 AI가 장소/장면 분석을 통해 최적 기법을 자동 추천합니다.
+              </div>
+            </div>
+
+            <!-- ⑥ 기타 (추가 입력 데이터) -->
+            <div class="project-input-box" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <label for="projInputNotes" style="font-size:13px; font-weight:800; color:var(--navy);">📝 ⑥ 기타 (추가 연출 및 제약사항)</label>
+                <span style="font-size:11px; color:#64748b;">자유 텍스트</span>
+              </div>
+              <textarea id="projInputNotes" rows="2" style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:12px; resize:vertical; background:#fff; box-sizing:border-box; color:#1e293b;" placeholder="원하는 촬영 분위기, 강조할 피사체, 영상 연출 방식, 이동 제약 등 추가 정보를 입력하세요.&#10;예: 소나무 사이로 정자가 드러나는 장면을 촬영하고 싶습니다. 웅장하고 시네마틱한 분위기를 원합니다."></textarea>
+            </div>
+
           </div>
+
+          <!-- 기존 자연어 검색 연계용 히든 인풋 & 버튼 (호환성 유지) -->
+          <input type="hidden" id="cinemaQueryInput" value="서울 여의도 한강공원 일몰 골든아워 자연·풍경 촬영">
+          <button id="cinemaSearchBtn" style="display:none;"></button>
         </div>
 
         <!-- Dynamic Contextual Notices & Announcements Container -->
@@ -2418,7 +2523,30 @@ function switchView(viewName) {
     $('topCrumb').textContent = '4. 설정 및 드론 관리';
     loadUserDrones();
   }
+
+  // URL 해시 동기화
+  if (window.location.hash !== '#' + viewName) {
+    try { history.replaceState(null, null, '#' + viewName); } catch(e) {}
+  }
 }
+
+// URL 해시 및 쿼리 파라미터 자동 탭 전환 (#cinema, ?tab=cinema 등)
+function checkInitialViewFromUrl() {
+  const hash = (window.location.hash || '').replace('#', '').toLowerCase();
+  const params = new URLSearchParams(window.location.search);
+  const tab = (params.get('tab') || '').toLowerCase();
+  const target = hash || tab;
+
+  if (target === 'cinema' || target === 'project' || target === 'shooting') {
+    switchView('cinema');
+  } else if (target === 'chat') {
+    switchView('chat');
+  } else if (target === 'settings') {
+    switchView('settings');
+  }
+}
+checkInitialViewFromUrl();
+window.addEventListener('hashchange', checkInitialViewFromUrl);
 
 // 1번 메뉴: 비행 적합성 분석 클릭
 $('navSafety')?.addEventListener('click', () => switchView('safety'));
@@ -6381,6 +6509,7 @@ function initProjectSync() {
 
   renderProjectQr(activeProjectCode);
   loadProjectShootingHistory(activeProjectCode);
+  initProjectCreationUI();
 }
 
 function renderProjectQr(projCode) {
@@ -6392,25 +6521,178 @@ function renderProjectQr(projCode) {
   }
 }
 
+/* =============================================================
+ * 6대 독립 박스 촬영 프로젝트 작성 및 검증 로직
+ * ============================================================= */
+function initProjectCreationUI() {
+  const dateInput = $('projInputDate');
+  if (dateInput && !dateInput.value) {
+    const today = new Date();
+    dateInput.value = today.toISOString().split('T')[0];
+  }
+
+  // 1. 촬영 목적 '기타' 선택 시 직접 입력 인풋 토글
+  const purposeSelect = $('projSelectPurpose');
+  const customPurposeInput = $('projInputPurposeCustom');
+  if (purposeSelect && customPurposeInput) {
+    purposeSelect.addEventListener('change', () => {
+      if (purposeSelect.value === '기타') {
+        customPurposeInput.style.display = 'block';
+        customPurposeInput.focus();
+      } else {
+        customPurposeInput.style.display = 'none';
+      }
+    });
+  }
+
+  // 2. 촬영 시작 / 종료 시간 유효성 실시간 검사
+  const startTimeInput = $('projInputStartTime');
+  const endTimeInput = $('projInputEndTime');
+  const badge = $('projTimeValidationBadge');
+  const msg = $('projTimeValidationMsg');
+
+  function validateTimes() {
+    if (!startTimeInput || !endTimeInput) return true;
+    const start = startTimeInput.value;
+    const end = endTimeInput.value;
+    if (!start || !end) return true;
+
+    if (start >= end) {
+      if (badge) {
+        badge.textContent = '⚠️ 시간 오류';
+        badge.style.color = '#ef4444';
+      }
+      if (msg) {
+        msg.textContent = '⚠️ 시작 시간이 종료 시간보다 앞서야 합니다.';
+        msg.style.color = '#ef4444';
+      }
+      return false;
+    } else {
+      if (badge) {
+        badge.textContent = '● 정상 시간';
+        badge.style.color = '#059669';
+      }
+      if (msg) {
+        msg.textContent = `${start} ~ ${end} (촬영 예정)`;
+        msg.style.color = '#64748b';
+      }
+      return true;
+    }
+  }
+
+  if (startTimeInput) startTimeInput.addEventListener('input', validateTimes);
+  if (endTimeInput) endTimeInput.addEventListener('input', validateTimes);
+
+  // 3. 5대 촬영 기법 칩 토글 이벤트
+  const chips = document.querySelectorAll('.technique-chip');
+  const techBadge = $('projTechCountBadge');
+  chips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      chip.classList.toggle('active');
+      if (chip.classList.contains('active')) {
+        chip.style.background = '#eff6ff';
+        chip.style.color = '#1d4ed8';
+        chip.style.borderColor = '#3b82f6';
+      } else {
+        chip.style.background = '#ffffff';
+        chip.style.color = '#475569';
+        chip.style.borderColor = '#cbd5e1';
+      }
+      const activeCount = document.querySelectorAll('.technique-chip.active').length;
+      if (techBadge) {
+        if (activeCount === 0) {
+          techBadge.textContent = '선택 안 함 (AI 자동 추천)';
+          techBadge.style.color = '#64748b';
+        } else {
+          techBadge.textContent = `${activeCount}개 선택됨`;
+          techBadge.style.color = '#1d4ed8';
+        }
+      }
+    });
+  });
+
+  // 4. 지도 연동 검색 버튼
+  const btnSearchLoc = $('btnSearchProjLoc');
+  if (btnSearchLoc) {
+    btnSearchLoc.addEventListener('click', () => {
+      const locVal = $('projInputLocation')?.value.trim();
+      if (locVal) {
+        const mapInput = $('mapSearchInput');
+        if (mapInput) {
+          mapInput.value = locVal;
+          if (typeof executeLocationSearch === 'function') {
+            executeLocationSearch();
+          }
+        }
+        toast(`📍 [${locVal}] 위치를 지도와 연동하여 검색합니다.`);
+      }
+    });
+  }
+
+  // 5. 신규 액션 버튼 이벤트 연결
+  const btnAction = $('btnCreateProjectAction');
+  if (btnAction) {
+    btnAction.addEventListener('click', createNewShootingProject);
+  }
+}
+
 async function createNewShootingProject() {
-  const query = $('cinemaQueryInput')?.value.trim() || '여의도 한강공원 일몰 골든아워 시네마틱 촬영';
+  const locInput = $('projInputLocation')?.value.trim() || '서울 여의도 한강공원';
+  
+  let purpose = $('projSelectPurpose')?.value || '자연·풍경 촬영';
+  if (purpose === '기타') {
+    purpose = $('projInputPurposeCustom')?.value.trim() || '기타 사용자 지정 목적';
+  }
+
+  const dateStr = $('projInputDate')?.value || new Date().toISOString().split('T')[0];
+  const startTime = $('projInputStartTime')?.value || '15:00';
+  const endTime = $('projInputEndTime')?.value || '17:00';
+
+  if (startTime >= endTime) {
+    alert('촬영 시작 시간은 종료 시간보다 앞서야 합니다. (예: 15:00 ~ 17:00)');
+    $('projInputStartTime')?.focus();
+    return;
+  }
+  const targetTime = `${startTime} ~ ${endTime}`;
+
+  // 5종 기법 중 활성화된 칩 수집
+  const activeChips = document.querySelectorAll('.technique-chip.active');
+  const desiredTechs = Array.from(activeChips).map(c => c.dataset.tech).filter(Boolean);
+  const preferredTech = desiredTechs.length > 0 ? desiredTechs[0] : null;
+
+  // 6번 기타 추가 연출 정보
+  const additionalNotes = $('projInputNotes')?.value.trim() || '';
+
+  const title = `${locInput} ${purpose}`;
   const token = localStorage.getItem('sky_auth_token');
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const d = new Date();
-  const dateStr = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-  const fallbackCode = `DRONE_${dateStr.replace(/-/g, '')}_${Math.floor(100 + Math.random() * 900)}`;
+  const dateStrNum = d.getFullYear() + String(d.getMonth()+1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+  const fallbackCode = `DRONE_${dateStrNum}_${Math.floor(100 + Math.random() * 900)}`;
+
+  // 위치 좌표 추출
+  let lat = 37.5284;
+  let lon = 126.9328;
+  if (locInput.includes('경복궁')) { lat = 37.5796; lon = 126.9770; }
+  else if (locInput.includes('해운대')) { lat = 35.1587; lon = 129.1604; }
+  else if (locInput.includes('성산일출봉')) { lat = 33.4584; lon = 126.9425; }
+  else if (locInput.includes('용산')) { lat = 37.5365; lon = 126.9771; }
 
   const payload = {
-    title: query.length > 30 ? query.substring(0, 30) + '...' : query,
-    place_name: query.includes('해운대') ? '부산 해운대 해변' : query.includes('성산일출봉') ? '제주 성산일출봉' : '서울 한강공원',
+    title: title.length > 30 ? title.substring(0, 30) : title,
+    place_name: locInput,
     target_date: dateStr,
-    target_time: '15:30 ~ 17:30',
-    scene_intent: query,
-    latitude: 37.5284,
-    longitude: 126.9328,
-    recommended_mode: '패럴랙스 리빌 & 선셋 아크',
+    target_time: targetTime,
+    shooting_purpose: purpose,
+    preferred_technique: preferredTech,
+    desired_techniques: desiredTechs,
+    additional_notes: additionalNotes,
+    scene_intent: additionalNotes || `${purpose} (${preferredTech || '기법 자동추천'})`,
+    latitude: lat,
+    longitude: lon,
+    recommended_mode: preferredTech ? `${preferredTech} 촬영 모드` : '패럴랙스 리빌 & 선셋 아크',
     recommended_shutter: '1/50s',
     recommended_nd_filter: 'ND16'
   };
@@ -6424,7 +6706,7 @@ async function createNewShootingProject() {
     if (res.ok) {
       const data = await res.json();
       activeProjectCode = data.project_code || fallbackCode;
-      toast(`새 촬영 프로젝트 [${activeProjectCode}]가 서버에 정상 등록되었습니다!`);
+      toast(`✨ 6대 설정이 반영된 촬영 프로젝트 [${activeProjectCode}]가 성공적으로 등록되었습니다!`);
     } else {
       activeProjectCode = fallbackCode;
       toast(`새 촬영 프로젝트 [${activeProjectCode}]가 로컬 생성되었습니다.`);

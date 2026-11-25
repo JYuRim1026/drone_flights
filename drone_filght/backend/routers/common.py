@@ -6,6 +6,7 @@ from backend.models.models import User
 from backend.external import WeatherAPIError
 from backend.schemas.schemas import (
     ShootingProjectCreate,
+    ShootingProjectUpdate,
     ShootingProjectResponse,
     WeatherResponse,
     UserSettingResponse,
@@ -46,6 +47,18 @@ def create_common_project(
     PC 웹에서 AI 분석을 거친 촬영 프로젝트를 생성하거나, 모바일에서 새로운 미션을 등록합니다.
     """
     return common_service.create_project(db, project_in)
+
+
+@router.put("/projects/{project_id}", response_model=ShootingProjectResponse, summary="촬영 프로젝트 정보 수정 [C 영역]")
+def update_common_project(
+    project_id: int = Path(..., description="프로젝트 고유 ID"),
+    project_in: ShootingProjectUpdate = ...,
+    db: Session = Depends(get_db)
+):
+    """
+    기존 프로젝트의 장소, 목적, 예정일, 시간, 선호 기법, 기타 정보를 수정합니다.
+    """
+    return common_service.update_project(db, project_id, project_in)
 
 
 @router.get("/weather", response_model=WeatherResponse, summary="실시간 날씨 및 비행 적합도 조회 [E 영역]")

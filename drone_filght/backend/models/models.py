@@ -263,10 +263,12 @@ class ShootingProject(Base):
         kwargs["place_name"] = p or "서울 한강공원"
         kwargs["shooting_location"] = p or "서울 한강공원"
 
-        s = kwargs.get("scene_intent") or kwargs.get("shooting_purpose")
-        if s:
-            kwargs["scene_intent"] = s
-            kwargs["shooting_purpose"] = s
+        purpose = kwargs.get("shooting_purpose")
+        intent = kwargs.get("scene_intent")
+        if purpose and not intent:
+            kwargs["scene_intent"] = purpose
+        elif intent and not purpose:
+            kwargs["shooting_purpose"] = intent
 
         m = kwargs.get("recommended_mode") or kwargs.get("recommended_composition")
         if m:

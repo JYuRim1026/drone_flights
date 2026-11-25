@@ -2,14 +2,16 @@ import uuid
 from datetime import datetime
 from sqlalchemy.orm import Session
 from backend.models.models import ShootingProject, User, UserSetting
-from backend.schemas.schemas import ShootingProjectCreate, UserSettingUpdate, WeatherResponse
+from backend.schemas.schemas import ShootingProjectCreate, ShootingProjectUpdate, UserSettingUpdate, WeatherResponse
 from fastapi import HTTPException
 from backend.external import external_manager
 
 class CommonService:
     @staticmethod
     def get_project_by_id(db: Session, project_id: int) -> ShootingProject:
-        project = db.query(ShootingProject).filter(ShootingProject.id == project_id).first()
+        project = db.query(ShootingProject).filter(
+            (ShootingProject.id == project_id) | (ShootingProject.project_id == project_id)
+        ).first()
         if not project:
             raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.")
         return project
@@ -27,13 +29,26 @@ class CommonService:
         r_str = uuid.uuid4().hex[:6].upper()
         p_code = getattr(project_in, "project_code", None) or f"DRONE_{d_str}_{r_str}"
 
+        # 6개 박스 필드 매핑
+        desired = list(project_in.desired_techniques or [])
+        if project_in.preferred_technique and project_in.preferred_technique not in desired:
+            desired.append(project_in.preferred_technique)
+
+        intent = project_in.additional_notes or project_in.scene_intent
+        purpose = project_in.shooting_purpose
+
         new_proj = ShootingProject(
             title=project_in.title,
+            project_name=project_in.title,
             place_name=project_in.place_name,
+            shooting_location=project_in.place_name,
             project_code=p_code,
             target_date=project_in.target_date,
             target_time=project_in.target_time,
-            scene_intent=project_in.scene_intent,
+            scene_intent=intent,
+            shooting_purpose=purpose,
+            desired_techniques=desired,
+            recommended_techniques=project_in.recommended_techniques or [],
             latitude=lat,
             longitude=lon,
             recommended_mode=project_in.recommended_mode or "패럴랙스 리빌 & 선셋 아크",
@@ -45,6 +60,48 @@ class CommonService:
         db.commit()
         db.refresh(new_proj)
         return new_proj
+
+    @staticmethod
+    def update_project(db: Session, project_id: int, project_in: ShootingProjectUpdate) -> ShootingProject:
+        project = db.query(ShootingProject).filter(
+            (ShootingProject.id == project_id) | (ShootingProject.project_id == project_id)
+        ).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="해당 프로젝트를 찾을 수 없습니다.")
+
+        if project_in.title is not None:
+            project.title = project_in.title
+            project.project_name = project_in.title
+        if project_in.place_name is not None:
+            project.place_name = project_in.place_name
+            project.shooting_location = project_in.place_name
+        if project_in.target_date is not None:
+            project.target_date = project_in.target_date
+        if project_in.target_time is not None:
+            project.target_time = project_in.target_time
+        if project_in.shooting_purpose is not None:
+            project.shooting_purpose = project_in.shooting_purpose
+        if project_in.additional_notes is not None:
+            project.scene_intent = project_in.additional_notes
+        elif project_in.scene_intent is not None:
+            project.scene_intent = project_in.scene_intent
+
+        desired = project_in.desired_techniques
+        if desired is None and project_in.preferred_technique:
+            desired = [project_in.preferred_technique]
+        if desired is not None:
+            project.desired_techniques = desired
+
+        if project_in.latitude is not None:
+            project.latitude = project_in.latitude
+        if project_in.longitude is not None:
+            project.longitude = project_in.longitude
+        if project_in.status is not None:
+            project.status = project_in.status
+
+        db.commit()
+        db.refresh(project)
+        return project
 
     @staticmethod
     def get_current_weather(lat: float, lon: float, location_name: str) -> WeatherResponse:
