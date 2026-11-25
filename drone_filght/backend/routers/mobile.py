@@ -140,7 +140,7 @@ def analyze_frame(
         scene_intent=req.scene_intent,
         purpose=req.purpose or "orbit",
         current_pitch=req.current_pitch or -15.0,
-        current_roll=req.current_roll or 0.0,
+        current_roll=req.current_roll,
         current_heading=req.current_heading,
         current_lat=req.current_lat,
         current_lng=req.current_lng,

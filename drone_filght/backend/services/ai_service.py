@@ -1,6 +1,7 @@
 import base64
 import io
 import json
+import logging
 import math
 import re
 from datetime import datetime, timezone
@@ -8,6 +9,8 @@ from typing import Dict, Any, Optional, Tuple, List, Union
 from PIL import Image
 import numpy as np
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from backend.config import settings
 from backend.models.models import User, ShootingAnalysis, ShootingProject, LocationAsset, UserPreferenceScore
@@ -43,6 +46,23 @@ class AIService:
         "시계방향 오빗 회전",
         "호버링 고정 (구도 일치 촬영)"
     ]
+
+    @staticmethod
+    def _safe_float(val: Any, default: Optional[float] = None) -> Optional[float]:
+        """
+        안전한 실수(float) 변환 유틸리티:
+        - None, NaN, Infinity, TypeError, ValueError 발생 시 default 반환
+        - default가 제공되지 않은 경우 None 반환
+        """
+        if val is None:
+            return default
+        try:
+            f = float(val)
+            if math.isnan(f) or math.isinf(f):
+                return default
+            return f
+        except (ValueError, TypeError):
+            return default
 
     # =========================================================================
     # Part A: PC 웹 AI 챗봇 (결정론적 안전 판단 기반)
@@ -672,7 +692,7 @@ class AIService:
         scene_intent: Optional[str] = None,
         purpose: str = "orbit",
         current_pitch: float = -15.0,
-        current_roll: float = 0.0,
+        current_roll: Optional[float] = None,
         current_heading: Optional[float] = None,
         current_lat: Optional[float] = None,
         current_lng: Optional[float] = None,
@@ -925,61 +945,109 @@ class AIService:
                     clean_str = re.sub(r"^```json\s*", "", reply_text.strip(), flags=re.MULTILINE)
                     clean_str = re.sub(r"\s*```$", "", clean_str, flags=re.MULTILINE)
                     parsed = json.loads(clean_str)
-                    if "subject" in parsed and "composition" in parsed:
+                    if isinstance(parsed, dict) and "subject" in parsed and "composition" in parsed:
                         gemini_parsed = parsed
                         source_label = f"Google Gemini API ({model_used})"
-                        is_semantic_recognized = True
-            except Exception:
+                    else:
+                        logger.warning(f"[AI SCENE] Gemini JSON lacks required keys: {list(parsed.keys()) if isinstance(parsed, dict) else type(parsed)}")
+            except (json.JSONDecodeError, ValueError, TypeError) as parse_err:
+                logger.warning(f"[AI SCENE] Gemini JSON decode failed: {parse_err}")
+                gemini_parsed = None
+            except Exception as gemini_err:
+                logger.warning(f"[AI SCENE] Gemini Vision API call failed: {gemini_err}")
                 gemini_parsed = None
 
         # 컴퓨터 비전 (PIL + NumPy) 에지 분석
         _, cv_data = cls._extract_cv_scene_features(image_base64)
+        if not cv_data or not isinstance(cv_data, dict):
+            logger.error("[AI SCENE] CV edge feature extraction completely failed. Applying default CV data.")
+            cv_data = {
+                "subject_center_x": 0.5,
+                "subject_center_y": 0.5,
+                "occupancy_ratio": 0.16,
+                "size_status": "APPROPRIATE",
+                "bounding_box": {"x_min": 0.35, "y_min": 0.35, "x_max": 0.65, "y_max": 0.65},
+                "lighting_type": "주간 맑은 조도",
+                "sky_ratio": 0.42,
+                "horizon_y": 0.45,
+                "horizon_tilt": 0.0
+            }
 
+        subject_coord_source = "cv_edge_energy_estimate"
         if gemini_parsed:
-            subj_raw = gemini_parsed.get("subject", {})
-            env_raw = gemini_parsed.get("environment", {})
-            horiz_raw = gemini_parsed.get("horizon", {})
-            comp_raw = gemini_parsed.get("composition", {})
+            try:
+                subj_raw = gemini_parsed.get("subject") or {}
+                env_raw = gemini_parsed.get("environment") or {}
+                horiz_raw = gemini_parsed.get("horizon") or {}
+                comp_raw = gemini_parsed.get("composition") or {}
 
-            subject_type = str(subj_raw.get("type", "피사체"))
-            subject_name = str(subj_raw.get("name", "인식된 피사체"))
-            subject_cx = float(subj_raw.get("center_x", cv_data["subject_center_x"]))
-            subject_cy = float(subj_raw.get("center_y", cv_data["subject_center_y"]))
-            occupancy = float(subj_raw.get("occupancy_ratio", cv_data["occupancy_ratio"]))
-            size_status = str(subj_raw.get("size_status", cv_data["size_status"]))
-            bounding_box = subj_raw.get("bounding_box", cv_data["bounding_box"])
+                # 피사체 좌표 유효성 검증: Gemini가 유효한 숫자 좌표를 반환했는지 확인
+                raw_cx = subj_raw.get("center_x")
+                raw_cy = subj_raw.get("center_y")
+                parsed_cx = cls._safe_float(raw_cx, None)
+                parsed_cy = cls._safe_float(raw_cy, None)
 
-            env_type = str(env_raw.get("type", "야외 촬영 환경"))
-            lighting = str(env_raw.get("lighting", cv_data["lighting_type"]))
-            sky_ratio = float(env_raw.get("sky_ratio", cv_data["sky_ratio"]))
-            env_summary = str(env_raw.get("summary", f"{env_type} 내 {lighting} 환경"))
+                has_valid_gemini_subject = (parsed_cx is not None and parsed_cy is not None)
 
-            horizon_y = float(horiz_raw.get("horizon_y", cv_data["horizon_y"]))
-            horizon_tilt = float(horiz_raw.get("tilt_deg", cv_data["horizon_tilt"]))
-            balance_status = str(horiz_raw.get("balance_status", "BALANCED"))
+                if has_valid_gemini_subject:
+                    is_semantic_recognized = True
+                    subject_cx = parsed_cx
+                    subject_cy = parsed_cy
+                    subject_coord_source = "gemini_multimodal_vision"
+                    subject_name = str(subj_raw.get("name") or "인식된 피사체")
+                    subject_type = str(subj_raw.get("type") or "피사체")
+                else:
+                    # Gemini가 null을 반환했거나 객체를 특정하지 못한 경우: CV 에지 에너지 중심 추정값 보조 사용 (피사체 인식 성공으로 간주하지 않음)
+                    is_semantic_recognized = False
+                    subject_cx = cls._safe_float(cv_data.get("subject_center_x"), 0.5)
+                    subject_cy = cls._safe_float(cv_data.get("subject_center_y"), 0.5)
+                    subject_coord_source = "cv_edge_energy_estimate"
+                    gemini_name = subj_raw.get("name")
+                    subject_name = f"{gemini_name} (에지 추정)" if gemini_name and str(gemini_name).strip() not in ["null", "None", ""] else "화면 내 에지 집중 영역 (피사체 미검출)"
+                    subject_type = str(subj_raw.get("type") or "미상 피사체")
+                    source_label = f"Google Gemini API ({model_used}) + CV 에지 추정 보조 (피사체 미검출)"
 
-            rec_name = str(comp_raw.get("recommended_name", "AI 맞춤 구도"))
-            rec_reason = str(comp_raw.get("reason", "피사체와 배경의 조화를 극대화하는 추천 구도입니다."))
-            target_x = float(comp_raw.get("target_x", 0.0))
-            target_y = float(comp_raw.get("target_y", 0.0))
-        else:
+                occupancy = cls._safe_float(subj_raw.get("occupancy_ratio"), cls._safe_float(cv_data.get("occupancy_ratio"), 0.16))
+                size_status = str(subj_raw.get("size_status") or cv_data.get("size_status", "APPROPRIATE"))
+                bounding_box = subj_raw.get("bounding_box") or cv_data.get("bounding_box")
+
+                env_type = str(env_raw.get("type") or "야외 촬영 환경")
+                lighting = str(env_raw.get("lighting") or cv_data.get("lighting_type", "주간 맑은 조도"))
+                sky_ratio = cls._safe_float(env_raw.get("sky_ratio"), cls._safe_float(cv_data.get("sky_ratio"), 0.42))
+                env_summary = str(env_raw.get("summary") or f"{env_type} 내 {lighting} 환경")
+
+                horizon_y = cls._safe_float(horiz_raw.get("horizon_y"), cls._safe_float(cv_data.get("horizon_y"), 0.45))
+                horizon_tilt = cls._safe_float(horiz_raw.get("tilt_deg"), cls._safe_float(cv_data.get("horizon_tilt"), 0.0))
+                balance_status = str(horiz_raw.get("balance_status") or "BALANCED")
+
+                rec_name = str(comp_raw.get("recommended_name") or "중앙 배치 구도 (Center Framing)")
+                rec_reason = str(comp_raw.get("reason") or "피사체와 배경의 조화를 극대화하는 추천 구도입니다.")
+                # target_x, target_y는 중심 0.0 기준 오프셋 (-1.0 ~ +1.0)
+                target_x = cls._safe_float(comp_raw.get("target_x"), 0.0)
+                target_y = cls._safe_float(comp_raw.get("target_y"), 0.0)
+            except (KeyError, TypeError, ValueError) as field_err:
+                logger.warning(f"[AI SCENE] Gemini field extraction failed: {field_err}. Switching to CV rule engine.")
+                gemini_parsed = None
+
+        if not gemini_parsed:
             # Fallback 규칙 기반 처리 (실제 피사체 의미 인식 불가함을 명시)
             is_semantic_recognized = False
+            subject_coord_source = "cv_edge_energy_estimate"
             source_label = "컴퓨터 비전 규칙 엔진 (PIL+NumPy 에지 분석, 의미 인식 제한)"
             subject_type = "미상 피사체"
             subject_name = "화면 내 에지 에너지 중심 검출 영역 (의미 인식 제한)"
             env_type = "현장 조도 및 수평 분석"
             env_summary = "조도 및 수평선 그래디언트 기반 기하학적 분석 (장소 의미 인식 제한)"
 
-            subject_cx = cv_data["subject_center_x"]
-            subject_cy = cv_data["subject_center_y"]
-            occupancy = cv_data["occupancy_ratio"]
-            size_status = cv_data["size_status"]
-            bounding_box = cv_data["bounding_box"]
-            lighting = cv_data["lighting_type"]
-            sky_ratio = cv_data["sky_ratio"]
-            horizon_y = cv_data["horizon_y"]
-            horizon_tilt = cv_data["horizon_tilt"]
+            subject_cx = cls._safe_float(cv_data.get("subject_center_x"), 0.5)
+            subject_cy = cls._safe_float(cv_data.get("subject_center_y"), 0.5)
+            occupancy = cls._safe_float(cv_data.get("occupancy_ratio"), 0.16)
+            size_status = str(cv_data.get("size_status", "APPROPRIATE"))
+            bounding_box = cv_data.get("bounding_box")
+            lighting = str(cv_data.get("lighting_type", "주간 맑은 조도"))
+            sky_ratio = cls._safe_float(cv_data.get("sky_ratio"), 0.42)
+            horizon_y = cls._safe_float(cv_data.get("horizon_y"), 0.45)
+            horizon_tilt = cls._safe_float(cv_data.get("horizon_tilt"), 0.0)
             balance_status = "LEFT_HEAVY" if subject_cx < 0.4 else ("RIGHT_HEAVY" if subject_cx > 0.6 else "BALANCED")
 
             # 촬영 목적 및 선호 기법 반영 목표 구도 결정
@@ -1020,10 +1088,29 @@ class AIService:
         offset_y = round(curr_y_norm - target_y, 3)
         dist = round(math.hypot(offset_x, offset_y), 3)
 
-        effective_roll = current_roll if abs(current_roll) > 0.5 else horizon_tilt
-        is_level = abs(effective_roll) <= 4.0
+        # 수평도 판정: 기기 센서 roll 우선 (센서값 누락 시 0도로 간주하지 않고 수평 미확인 처리)
+        has_sensor_roll = (current_roll is not None)
+        has_horizon_tilt = (horizon_tilt is not None and abs(horizon_tilt) > 0.01)
 
-        if not is_level:
+        if has_sensor_roll:
+            effective_roll = float(current_roll)
+            is_level = abs(effective_roll) <= 4.0
+            roll_status_available = True
+        elif has_horizon_tilt:
+            effective_roll = float(horizon_tilt)
+            is_level = abs(effective_roll) <= 4.0
+            roll_status_available = True
+        else:
+            effective_roll = 0.0
+            is_level = False
+            roll_status_available = False
+
+        if not roll_status_available:
+            is_aligned = False
+            guide_direction = "sensor_waiting"
+            guide_message = "기기 수평 센서 신호 대기 중입니다. 스마트폰을 반듯하게 수평으로 유지해 주세요."
+            frame_score = 60
+        elif not is_level:
             is_aligned = False
             tilt_val = abs(round(effective_roll, 1))
             guide_direction = "level_right" if effective_roll > 0 else "level_left"
@@ -1040,10 +1127,19 @@ class AIService:
             guide_message = f"피사체 점유율({int(occupancy*100)}%)이 너무 작습니다. 조금 더 가까이 접근해 피사체를 강조하세요."
             frame_score = 72
         elif dist <= 0.18:
-            is_aligned = True
-            guide_direction = "none"
-            guide_message = f"✓ [{rec_name}] 일치! 피사체가 최적의 촬영 프레임 내에 안정적으로 락온되었습니다."
-            frame_score = min(98, max(90, int(100 - dist * 40)))
+            if is_semantic_recognized or image_base64 is None:
+                # 피사체 인식이 확인되었거나 시뮬레이션 환경인 경우 정상 락온 및 촬영 준비 완료
+                is_aligned = True
+                guide_direction = "none"
+                guide_message = f"✓ [{rec_name}] 일치! 피사체가 최적의 촬영 프레임 내에 안정적으로 락온되었습니다."
+                frame_score = min(98, max(90, int(100 - dist * 40)))
+            else:
+                # 실측 카메라 영상에서 피사체 인식이 불확실한 경우(CV 추정값만 존재):
+                # 구도 안내는 제공하되 초록색 프레임 활성화는 제한
+                is_aligned = False
+                guide_direction = "none"
+                guide_message = f"[{rec_name}] 에지 중심 정렬 중 (피사체 식별 대기: 목표 피사체가 잘 보이도록 프레임 안에 비춰주세요)."
+                frame_score = min(78, max(65, int(85 - dist * 30)))
         else:
             is_aligned = False
             frame_score = max(55, int(90 - dist * 70))
@@ -1062,8 +1158,10 @@ class AIService:
                     guide_direction = "up"
                     guide_message = "카메라가 낮거나 피사체가 상단에 있습니다. 카메라를 ⬆️ 위쪽으로 올리세요."
 
-        # 초록색 프레임 조건: 현재 카메라 구도 및 수평도 적합 여부로만 결정 (보행 이동에 종속되지 않음)
-        is_ready = bool(is_aligned and is_level)
+        # 초록색 프레임 조건:
+        # 1. 카메라 구도 및 수평도 일치 (is_aligned and is_level)
+        # 2. 피사체 인식이 불확실한 상태(CV 에지 추정값만 존재)에서는 초록색 프레임 활성화 제한
+        is_ready = bool(is_aligned and is_level and (is_semantic_recognized or image_base64 is None))
 
         subject_dict = {
             "type": subject_type,
@@ -1072,7 +1170,8 @@ class AIService:
             "occupancy_ratio": occupancy,
             "size_status": size_status,
             "bounding_box": bounding_box,
-            "is_semantic_recognized": is_semantic_recognized
+            "is_semantic_recognized": is_semantic_recognized,
+            "coordinate_source": subject_coord_source
         }
 
         env_dict = {
