@@ -1,12 +1,16 @@
 import os
 import json
+import base64
+import logging
+from datetime import datetime
 from fastapi import APIRouter, Depends, Path, Query, UploadFile, File, Form, HTTPException, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
+from pydantic import BaseModel, Field
 
 from backend.database import get_db
-from backend.models.models import User, ShootingProject, ShootingAnalysis
+from backend.models.models import User, ShootingProject, ShootingAnalysis, LocationAsset
 from backend.schemas.schemas import (
     ShootingProjectCreate,
     ShootingProjectResponse,
@@ -42,6 +46,21 @@ from backend.services.ai_service import ai_service
 from backend.services.collaborative_path_service import collaborative_path_service
 from backend.services.personalized_path_service import personalized_path_service
 from backend.services.auth_service import auth_service, get_current_user, get_optional_current_user
+from backend.external.gemini_client import gemini_client
+
+logger = logging.getLogger(__name__)
+
+class KeyframeAnalyzeItem(BaseModel):
+    seq: int = Field(..., description="프레임 순번 (1, 2, 3)")
+    ratio: Optional[float] = Field(None, description="영상 위치 비율 (0.15, 0.50, 0.85)")
+    timestamp: Optional[float] = Field(None, description="추출 타임스탬프 (초)")
+    base64: str = Field(..., description="Base64 인코딩된 이미지 데이터")
+    mime_type: Optional[str] = Field("image/jpeg", description="MIME 타입")
+    label: Optional[str] = Field(None, description="프레임 레이블")
+
+class AnalyzeKeyframesRequest(BaseModel):
+    keyframes: List[KeyframeAnalyzeItem] = Field(..., description="추출된 대표 프레임 목록 (최대 3장)")
+    scene_intent: Optional[str] = Field(None, description="촬영 기획 의도 또는 설명")
 
 router = APIRouter(prefix="/mobile", tags=["Mobile API (C, D Data)"])
 
@@ -463,6 +482,317 @@ def upload_location_asset_file(
         detected_features=features_dict,
         current_user=current_user
     )
+
+
+@router.post(
+    "/projects/{project_id}/assets/{asset_id}/analyze-keyframes",
+    status_code=200,
+    summary="3. [Phase 12] 사전 장소 영상 대표 프레임 Gemini Vision 종합 분석 및 메타데이터 갱신"
+)
+def analyze_location_asset_keyframes(
+    project_id: int = Path(..., description="프로젝트 고유 ID"),
+    asset_id: int = Path(..., description="분석 대상 장소 에셋 ID"),
+    req: AnalyzeKeyframesRequest = ...,
+    token: Optional[str] = Query(None, description="모바일 QR 접속 보안 토큰"),
+    current_user: Optional[User] = Depends(get_optional_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    브라우저에서 추출된 대표 프레임(최대 3장)을 전달받아 Gemini Vision 다중 이미지 단일 요청으로 분석합니다.
+    - 백엔드 엄격 검증: 최대 3장 이하, 디코딩된 전체 이미지 총합 120KB 이하
+    - 프로젝트 소유권 및 에셋 소속 관계 교차 검증
+    - 분석 성공 시 해당 LocationAsset의 detected_features만 갱신
+    - ShootingProject.analysis_result는 일체 수정하지 않음 (사후 평가 데이터 보존)
+    """
+    # 1. 사용자 프로젝트 소유권 검증
+    auth_service.verify_project_ownership(db, str(project_id), current_user, _clean_token(token))
+
+    # 2. 에셋 존재 및 프로젝트 소속 관계 검증
+    asset = db.query(LocationAsset).filter(
+        LocationAsset.asset_id == asset_id,
+        LocationAsset.project_id == project_id
+    ).first()
+    if not asset:
+        raise HTTPException(
+            status_code=404,
+            detail=f"프로젝트 #{project_id}에 소속된 장소 에셋 #{asset_id}을(를) 찾을 수 없습니다."
+        )
+
+    # 3. 프레임 개수 검증 (최대 3장)
+    if not req.keyframes or len(req.keyframes) == 0:
+        raise HTTPException(status_code=400, detail="분석할 대표 프레임이 전달되지 않았습니다.")
+
+    if len(req.keyframes) > 3:
+        raise HTTPException(
+            status_code=400,
+            detail=f"분석 가능한 대표 프레임은 최대 3장입니다. (전달된 개수: {len(req.keyframes)}장)"
+        )
+
+    # 4. 각 프레임 Base64 디코딩 및 총 용량 검증 (최대 120KB) - Gemini 호출 전 사전 차단!
+    MAX_TOTAL_DECODED_BYTES = 120 * 1024  # 122,880 bytes (120KB)
+    total_decoded_bytes = 0
+    images_for_gemini: List[Dict[str, Any]] = []
+
+    for idx, kf in enumerate(req.keyframes):
+        raw_b64 = (kf.base64 or "").strip()
+        if not raw_b64:
+            raise HTTPException(status_code=400, detail=f"프레임 #{kf.seq}의 Base64 데이터가 비어 있습니다.")
+
+        clean_b64 = raw_b64
+        detected_mime = kf.mime_type or "image/jpeg"
+        if "," in clean_b64:
+            header, clean_b64 = clean_b64.split(",", 1)
+            clean_b64 = clean_b64.strip()
+            if "image/png" in header:
+                detected_mime = "image/png"
+            elif "image/webp" in header:
+                detected_mime = "image/webp"
+            elif "image/jpeg" in header or "image/jpg" in header:
+                detected_mime = "image/jpeg"
+
+        try:
+            decoded_bytes = base64.b64decode(clean_b64, validate=True)
+        except Exception as b64_err:
+            raise HTTPException(status_code=400, detail=f"프레임 #{kf.seq}의 Base64 디코딩 실패: {b64_err}")
+
+        if len(decoded_bytes) == 0:
+            raise HTTPException(status_code=400, detail=f"프레임 #{kf.seq}의 디코딩된 크기가 0바이트입니다.")
+
+        total_decoded_bytes += len(decoded_bytes)
+        label_text = kf.label or f"프레임 #{kf.seq} ({int((kf.ratio or 0) * 100)}%)"
+
+        images_for_gemini.append({
+            "data": clean_b64,
+            "mime_type": detected_mime,
+            "label": label_text
+        })
+
+    if total_decoded_bytes > MAX_TOTAL_DECODED_BYTES:
+        total_kb = round(total_decoded_bytes / 1024, 2)
+        raise HTTPException(
+            status_code=400,
+            detail=f"전송된 대표 프레임의 총 용량({total_kb}KB)이 허용 한도(120KB)를 초과했습니다."
+        )
+
+    # 5. Gemini Vision 멀티모달 프롬프트 구성
+    project = db.query(ShootingProject).filter(ShootingProject.id == project_id).first()
+    proj_title = (project.title or project.project_name or "촬영 프로젝트") if project else "촬영 프로젝트"
+    proj_place = (project.place_name or project.shooting_location or "촬영 현장") if project else "촬영 현장"
+    effective_intent = req.scene_intent or (project.scene_intent if project else None) or "자연 및 도심 시네마틱 촬영"
+
+    prompt = f"""당신은 항공촬영 및 시네마토그래피 전문 AI 감독입니다.
+촬영 예정 프로젝트 컨텍스트:
+- 프로젝트: {proj_title} (장소: {proj_place})
+- 기획 의도: {effective_intent}
+
+현장 참조 영상에서 추출된 대표 프레임 3장(15% 도입부, 50% 중심 장면, 85% 원경/마무리)입니다.
+이 3장의 연속된 공간 정보를 종합 분석하여 최적의 촬영 구도와 추천 기법을 다음 JSON 구조로만 엄격히 응답하십시오:
+{{
+  "name": "핵심 피사체/랜드마크 명칭 (예: 한강 철교 주탑, 남산 서울타워 등)",
+  "title": "장소 및 랜드마크 요약 명칭 (예: 한강 철교 주탑과 여의도 스카이라인)",
+  "scene_type": "도시 건축|자연 풍경|해안 수변|인물 중심|공원 및 레저|역사 유적",
+  "lighting": "주간 맑은 순광|골든아워 온화한 조도|일몰 후 저조도|고조도 역광|흐린 날 확산광",
+  "summary": "장소의 시각적 공간 특성 및 환경 1~2문장 요약",
+  "detected_subjects": [
+    {{
+      "name": "피사체 명칭",
+      "type": "건축물|자연지형|인물|차량/교통|조형물|수면",
+      "center_x": 0.0~1.0 (이미지 가로 0=좌, 0.5=중앙, 1=우),
+      "center_y": 0.0~1.0 (이미지 세로 0=상, 0.5=중앙, 1=하),
+      "occupancy_ratio": 0.0~1.0,
+      "bounding_box": {{"x_min": 0.0, "y_min": 0.0, "x_max": 1.0, "y_max": 1.0}}
+    }}
+  ],
+  "depth_layers": {{
+    "foreground": "근경 요소 설명",
+    "midground": "중경 요소 설명 (주 피사체 위치)",
+    "background": "원경 요소 설명"
+  }},
+  "recommended_composition": {{
+    "composition_name": "3x3 삼분할 황금비율 구도 (Rule of Thirds)|중앙 배치 구도 (Center Framing)|좌우 대칭 구도 (Symmetry Framing)|리딩라인 소실점 구도 (Leading Lines)|전경 프레이밍 구도 (Foreground Framing)|네거티브 스페이스 구도 (Negative Space)",
+    "target_x": -1.0~1.0 (화면 중심 0.0 기준 오프셋: -0.33=좌측 1/3, 0=정중앙, +0.33=우측 1/3),
+    "target_y": -1.0~1.0 (화면 중심 0.0 기준 오프셋: -0.33=상단 1/3, 0=정중앙, +0.33=하단 1/3),
+    "horizon_y": 0.0~1.0,
+    "is_horizon_visible": true,
+    "rationale": "추천 구도 선정 사유 1~2문장"
+  }},
+  "recommended_techniques": [
+    {{
+      "technique_key": "orbit_poi|reveal|flyby|line|dronie",
+      "technique_name": "추천 기법 명칭",
+      "fit_score": 50~100,
+      "reason": "해당 기법이 이 장면에 최적인 사유"
+    }}
+  ],
+  "visual_hazards": [
+    "시각적 주의 요소 (예: 고압 전선, 역광 암부 디테일 손실 등)"
+  ]
+}}"""
+
+    # 6. Gemini Vision 호출 (단일 모델, connect: 3.0s, read: 6.5s)
+    reply_text, model_used, error_detail = gemini_client.generate_multi_vision(
+        prompt=prompt,
+        images=images_for_gemini,
+        system_instruction="당신은 전문 시네마틱 촬영 구도 AI입니다. 반드시 지정된 순수 JSON 구조로만 응답하세요.",
+        connect_timeout=3.0,
+        read_timeout=6.5
+    )
+
+    if error_detail or not reply_text:
+        logger.warning(f"[Phase 12 Analyze] Gemini Multi-Vision 호출 실패 (Asset #{asset_id}): {error_detail}")
+        if error_detail and "IMAGE_VALIDATION" in error_detail:
+            raise HTTPException(status_code=400, detail=error_detail)
+        elif error_detail and "TIMEOUT" in error_detail:
+            raise HTTPException(
+                status_code=504,
+                detail="AI Vision 분석 서버 응답 대기 시간 초과 (Gemini Timeout). 기본 카메라 모드를 유지해 주세요."
+            )
+        else:
+            raise HTTPException(
+                status_code=502,
+                detail=f"AI Vision 분석 처리 실패: {error_detail or 'Gemini 서비스 무응답'}"
+            )
+
+    # 7. 분석 결과 JSON 구문 역직렬화 및 구조/좌표 범위 엄격 검증
+    try:
+        raw_parsed = json.loads(reply_text)
+    except Exception as parse_err:
+        raise HTTPException(status_code=502, detail=f"Gemini 응답 JSON 역직렬화 실패: {parse_err}")
+
+    if not isinstance(raw_parsed, dict):
+        raise HTTPException(status_code=502, detail="Gemini 분석 결과가 유효한 딕셔너리 객체가 아닙니다.")
+
+    def _clamp(val, min_v, max_v, default_v):
+        try:
+            f = float(val)
+            if f < min_v or f > max_v:
+                return default_v
+            return round(f, 3)
+        except (TypeError, ValueError):
+            return default_v
+
+    name_val = str(raw_parsed.get("name") or raw_parsed.get("title") or "인식된 피사체").strip()
+    title_val = str(raw_parsed.get("title") or name_val).strip()
+    scene_type_val = str(raw_parsed.get("scene_type") or "도시 건축").strip()
+    lighting_val = str(raw_parsed.get("lighting") or "주간 맑은 조도").strip()
+    summary_val = str(raw_parsed.get("summary") or f"{scene_type_val} 환경 내 {name_val}").strip()
+
+    # 피사체 2D 상대좌표 검증 (0.0 ~ 1.0)
+    validated_subjects = []
+    raw_subjects = raw_parsed.get("detected_subjects") or []
+    if isinstance(raw_subjects, list):
+        for s in raw_subjects:
+            if isinstance(s, dict):
+                s_name = str(s.get("name") or name_val).strip()
+                s_type = str(s.get("type") or "건축물").strip()
+                cx = _clamp(s.get("center_x"), 0.0, 1.0, 0.5)
+                cy = _clamp(s.get("center_y"), 0.0, 1.0, 0.5)
+                occ = _clamp(s.get("occupancy_ratio"), 0.0, 1.0, 0.2)
+                bbox_raw = s.get("bounding_box") or {}
+                bbox = {
+                    "x_min": _clamp(bbox_raw.get("x_min"), 0.0, 1.0, max(0.0, cx - 0.15)),
+                    "y_min": _clamp(bbox_raw.get("y_min"), 0.0, 1.0, max(0.0, cy - 0.15)),
+                    "x_max": _clamp(bbox_raw.get("x_max"), 0.0, 1.0, min(1.0, cx + 0.15)),
+                    "y_max": _clamp(bbox_raw.get("y_max"), 0.0, 1.0, min(1.0, cy + 0.15)),
+                }
+                validated_subjects.append({
+                    "name": s_name,
+                    "type": s_type,
+                    "center_x": cx,
+                    "center_y": cy,
+                    "occupancy_ratio": occ,
+                    "bounding_box": bbox
+                })
+
+    if not validated_subjects:
+        validated_subjects.append({
+            "name": name_val,
+            "type": "건축물",
+            "center_x": 0.5,
+            "center_y": 0.5,
+            "occupancy_ratio": 0.2,
+            "bounding_box": {"x_min": 0.35, "y_min": 0.35, "x_max": 0.65, "y_max": 0.65}
+        })
+
+    # 추천 구도 및 화면 오프셋 좌표 검증 (-1.0 ~ +1.0)
+    raw_comp = raw_parsed.get("recommended_composition") or {}
+    comp_name = str(raw_comp.get("composition_name") or "3x3 삼분할 황금비율 구도 (Rule of Thirds)").strip()
+    target_x = _clamp(raw_comp.get("target_x"), -1.0, 1.0, 0.0)
+    target_y = _clamp(raw_comp.get("target_y"), -1.0, 1.0, 0.0)
+    horizon_y = _clamp(raw_comp.get("horizon_y"), 0.0, 1.0, 0.45)
+    comp_rationale = str(raw_comp.get("rationale") or "피사체와 배경의 원근감을 극대화하는 추천 구도입니다.").strip()
+
+    validated_comp = {
+        "composition_name": comp_name,
+        "target_x": target_x,
+        "target_y": target_y,
+        "horizon_y": horizon_y,
+        "is_horizon_visible": bool(raw_comp.get("is_horizon_visible", True)),
+        "rationale": comp_rationale
+    }
+
+    # 깊이 레이어 검증
+    raw_depth = raw_parsed.get("depth_layers") or {}
+    validated_depth = {
+        "foreground": str(raw_depth.get("foreground") or "근경 산책로 및 수변 지형").strip(),
+        "midground": str(raw_depth.get("midground") or f"{name_val} 위치 구간").strip(),
+        "background": str(raw_depth.get("background") or "원경 스카이라인 및 하늘").strip()
+    }
+
+    # 추천 기법 검증
+    raw_techs = raw_parsed.get("recommended_techniques") or []
+    validated_techs = []
+    if isinstance(raw_techs, list):
+        for t in raw_techs:
+            if isinstance(t, dict):
+                validated_techs.append({
+                    "technique_key": str(t.get("technique_key") or "orbit_poi").strip(),
+                    "technique_name": str(t.get("technique_name") or "피사체 궤도 선회 (Orbit)").strip(),
+                    "fit_score": int(_clamp(t.get("fit_score"), 0, 100, 85)),
+                    "reason": str(t.get("reason") or "장면 피사체 집중 연출에 적합").strip()
+                })
+    if not validated_techs:
+        validated_techs.append({
+            "technique_key": "orbit_poi",
+            "technique_name": "피사체 궤도 선회 (Orbit)",
+            "fit_score": 90,
+            "reason": "중경 랜드마크 중심 회전 촬영에 최적"
+        })
+
+    raw_hazards = raw_parsed.get("visual_hazards") or []
+    validated_hazards = [str(h).strip() for h in raw_hazards if str(h).strip()] if isinstance(raw_hazards, list) else []
+
+    # 8. 최종 구조화된 특징 메타데이터 구성 (기존 ai_service L750 호환을 위해 name/title 최상위 유지)
+    final_features = {
+        "name": name_val,
+        "title": title_val,
+        "scene_type": scene_type_val,
+        "lighting": lighting_val,
+        "summary": summary_val,
+        "analyzed_at": datetime.utcnow().isoformat(),
+        "model_used": model_used,
+        "pre_video_analysis": {
+            "detected_subjects": validated_subjects,
+            "depth_layers": validated_depth,
+            "recommended_composition": validated_comp,
+            "recommended_techniques": validated_techs,
+            "visual_hazards": validated_hazards
+        }
+    }
+
+    # 9. 해당 LocationAsset의 detected_features만 안전하게 갱신 (다른 에셋 보존)
+    asset.detected_features = final_features
+    db.commit()
+    db.refresh(asset)
+
+    return {
+        "status": "success",
+        "project_id": project_id,
+        "asset_id": asset_id,
+        "model_used": model_used,
+        "db_saved": True,
+        "analysis": final_features
+    }
 
 
 @router.get(
