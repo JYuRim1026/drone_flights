@@ -687,11 +687,17 @@ function getApiBaseUrl() {
 }
 const API_BASE = getApiBaseUrl();
 const _origFetch = window.fetch;
-window.fetch = function(url, options) {
+window.fetch = function(url, options = {}) {
+  let finalUrl = url;
   if (typeof url === 'string' && url.startsWith('/api/') && API_BASE) {
-    url = API_BASE + url;
+    finalUrl = API_BASE + url;
   }
-  return _origFetch.call(this, url, options);
+  const opts = options || {};
+  opts.headers = opts.headers || {};
+  if (typeof opts.headers.append !== 'function' && !Array.isArray(opts.headers)) {
+    opts.headers['ngrok-skip-browser-warning'] = 'true';
+  }
+  return _origFetch.call(this, finalUrl, opts);
 };
 
 const projectBanner = document.getElementById('projectBanner');
@@ -812,7 +818,9 @@ function hideToast() {
 }
 
 function getAuthHeaders() {
-  const headers = {};
+  const headers = {
+    'ngrok-skip-browser-warning': 'true'
+  };
   const t = token && token !== 'mobile_launch' ? token : localAuthToken;
   if (t) {
     headers['Authorization'] = `Bearer ${t}`;
@@ -1114,16 +1122,29 @@ async function requestAiSceneAnalysis(manual = false) {
     save_result: true
   };
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 9000);
+
   try {
     const headers = getAuthHeaders();
     const queryToken = (token && token !== 'mobile_launch' && token.includes('.')) ? `?token=${encodeURIComponent(token)}` : '';
     const apiRes = await fetch(`/api/mobile/analyze${queryToken}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...headers },
-      body: JSON.stringify(reqPayload)
+      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true', ...headers },
+      body: JSON.stringify(reqPayload),
+      signal: controller.signal
     });
+    clearTimeout(timeoutId);
 
     if (!apiRes.ok) throw new Error(`서버 응답 오류 (${apiRes.status})`);
+
+    // ngrok 또는 프록시의 비정상 HTML 응답(경고창 등) 검증
+    const contentType = apiRes.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      const textSample = await apiRes.text();
+      throw new Error(`비정상 응답 수신 (${contentType.split(';')[0]}): ${textSample.slice(0, 60)}`);
+    }
+
     const res = await apiRes.json();
     latestAnalysisResult = res;
 
@@ -1153,6 +1174,7 @@ async function requestAiSceneAnalysis(manual = false) {
       showToast(`AI 장면 분석 완료: [${res.recommended_composition}] 추천`, 'success');
     }
   } catch (err) {
+    clearTimeout(timeoutId);
     console.warn('AI 장면 분석 실패:', err);
     // [실패 상태 처리] 실패/오류 시 절대 촬영 가능 상태로 두지 않고 대기 잠금 유지
     isCompositionReady = false;
@@ -1162,11 +1184,13 @@ async function requestAiSceneAnalysis(manual = false) {
       recordBtn.disabled = true;
       recordBtn.textContent = '● 촬영 시작 (구도 대기)';
     }
-    frameBadge.textContent = '⚠️ AI 분석 통신 지연 (센서 수평 안내 대기)';
+    const isTimeout = err.name === 'AbortError';
+    const errMsg = isTimeout ? 'AI 통신 시간 초과 (재시도 대기)' : (err.message || 'AI 분석 통신 지연');
+    frameBadge.textContent = `⚠️ ${errMsg}`;
     frameBadge.style.background = '#b45309';
-    updateCameraAimUI('error', 'AI 분석 통신 지연. 스마트폰을 반듯하게 들고 재시도해 주세요.');
+    updateCameraAimUI('error', `통신 지연 중: ${errMsg}. 스마트폰을 반듯하게 들고 대기해 주세요.`);
     if (fb) {
-      fb.innerHTML = `<span>⚠️ <b>AI 분석 통신 지연:</b> 스마트폰 센서 기준 기본 가이드로 동작 중입니다.</span><span style="color:#b45309; font-weight:700;">센서 모드</span>`;
+      fb.innerHTML = `<span>⚠️ <b>${errMsg}:</b> 스마트폰 센서 기준 기본 가이드로 동작 중입니다.</span><span style="color:#b45309; font-weight:700;">센서 모드</span>`;
     }
   } finally {
     isAiAnalyzing = false;
@@ -1308,7 +1332,7 @@ function evaluateRealtimeOrientation() {
   }
 }
 
-// 5초 주기 실제 AI 구도 분석 요청 루프 (가짜 Math.sin 드리프트 완전 제거)
+// 8초 주기 실제 AI 구도 분석 요청 루프 (모바일 네트워크 및 Gemini 비전 왕복 시간 고려)
 function startAiAutoTracking() {
   stopAiAutoTracking();
 
@@ -1317,7 +1341,7 @@ function startAiAutoTracking() {
     if (stream && !isRecording && !isAiAnalyzing) {
       requestAiSceneAnalysis(false);
     }
-  }, 5000);
+  }, 8000);
 }
 
 function stopAiAutoTracking() {
