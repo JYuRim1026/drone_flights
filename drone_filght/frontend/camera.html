@@ -385,6 +385,11 @@ body{margin:0;background:#080d16;color:#fff;font-family:system-ui,-apple-system,
 .btn-download{background:#263b59;color:#fff}
 .btn-upload{background:#2f75ff;color:#fff}
 
+/* 상단 워크플로우 대형 사각형 카드 숨김 (실시간 카메라 촬영 뷰파인더 집중) */
+.workflow-card {
+  display: none !important;
+}
+
 @media(max-width:480px){
   .wrap{padding:10px 8px;padding-bottom:calc(16px + env(safe-area-inset-bottom))}
   .top{margin-bottom:8px}
@@ -455,8 +460,8 @@ body{margin:0;background:#080d16;color:#fff;font-family:system-ui,-apple-system,
     </div>
   </header>
 
-  <!-- 2-Step Workflow Guide Banner (모바일 컴팩트 카드) -->
-  <div class="workflow-card" style="background:#0e1726; border:1px solid #1e293b; border-radius:10px; padding:10px 12px; margin-bottom:8px; box-shadow:0 2px 8px rgba(0,0,0,0.3);">
+  <!-- 2-Step Workflow Guide Banner (모바일 컴팩트 카드 - 사용자 요청으로 촬영 뷰에서 대형 사각형 숨김 유지) -->
+  <div class="workflow-card" style="display:none !important; background:#0e1726; border:1px solid #1e293b; border-radius:10px; padding:10px 12px; margin-bottom:8px; box-shadow:0 2px 8px rgba(0,0,0,0.3);">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
       <strong style="font-size:12.5px; color:#93c5fd;">📸 촬영 설정 & 사전 스캔</strong>
       <span id="workflowBadge" style="font-size:10.5px; background:#1e293b; color:#38bdf8; font-weight:700; padding:2px 6px; border-radius:6px;">실시간 안내 가동</span>
