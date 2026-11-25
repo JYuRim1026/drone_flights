@@ -2019,164 +2019,21 @@ button { cursor: pointer; }
                   📹 <b>카메라 짐벌 피치</b>: <span id="cinemaGimbal">-15° ~ -25° (피사체 중심 락온)</span>
                 </div>
               </div>
-
-              <!-- [Image 2 Table Item 7] 카메라 설정 레시피 (180° Shutter Rule) -->
-              <div>
-                <div style="font-size:13.5px; font-weight:800; color:var(--navy); margin-bottom:8px; display:flex; align-items:center; gap:6px;">
-                  <span>📷</span> <span>카메라 설정 레시피 (180° Rule 프로페셔널 세팅)</span>
-                </div>
-                <div class="camera-recipe-grid">
-                  <div class="recipe-card">
-                    <span class="recipe-lbl">해상도 &amp; FPS</span>
-                    <div class="recipe-val" id="camRes">4K @ 24fps</div>
-                    <span class="recipe-sub">시네마틱 표준</span>
-                  </div>
-                  <div class="recipe-card">
-                    <span class="recipe-lbl">셔터스피드</span>
-                    <div class="recipe-val" id="camShutter">1/50s</div>
-                    <span class="recipe-sub">180° 모션블러</span>
-                  </div>
-                  <div class="recipe-card">
-                    <span class="recipe-lbl">추천 ND 필터</span>
-                    <div class="recipe-val" id="camNd" style="color:#d97706;">ND16</div>
-                    <span class="recipe-sub">주간 역광 감광</span>
-                  </div>
-                  <div class="recipe-card">
-                    <span class="recipe-lbl">ISO &amp; WB</span>
-                    <div class="recipe-val" id="camIsoWb">ISO 100</div>
-                    <span class="recipe-sub">WB: 5600K</span>
-                  </div>
-                  <div class="recipe-card">
-                    <span class="recipe-lbl">컬러 프로파일</span>
-                    <div class="recipe-val" id="camProfile">D-Log M</div>
-                    <span class="recipe-sub">10-bit 다이내믹</span>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
 
-          <!-- RIGHT COLUMN: 3 Stacked Cards (Matching Image 1 Right Column: Timeline, Fuel Chart, Maintenance & QR) -->
+          <!-- RIGHT COLUMN: 모바일 연동 & 프로젝트 관제 (불필요한 타임라인·배터리·게이지 제거 및 상단 재배치) -->
           <div class="airaxis-col-right">
-
-            <!-- Card 1: Flight Timeline (Image 1 Top-right Timeline style) -->
+            <!-- 모바일 연동 및 프로젝트 관제 카드 -->
             <div class="airaxis-card" style="padding:16px;">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                <div style="font-size:14px; font-weight:800; color:var(--navy);">Flight Timeline</div>
-                <span style="font-size:11px; color:#94a3b8; cursor:pointer;" title="확장">⤢</span>
-              </div>
-              <div style="font-size:12px; font-weight:700; color:#0f172a; margin-bottom:12px;">
-                <span id="cinemaRecTimeTxt">15:30 ~ 17:30</span> · <span style="color:#059669;">비행 추천 구간</span>
-              </div>
-
-              <!-- Connected Nodes Timeline Stepper (Image 1 exact rail style) -->
-              <div class="flight-timeline-rail">
-                <div class="timeline-node active">
-                  <div class="node-dot"></div>
-                  <span class="node-label">이륙(WP1)</span>
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <div style="font-size:14px; font-weight:800; color:var(--navy); display:flex; align-items:center; gap:6px;">
+                  <span>📱</span> <span>모바일 연동 &amp; 프로젝트 관제</span>
                 </div>
-                <div class="timeline-line"></div>
-                <div class="timeline-node">
-                  <div class="node-dot"></div>
-                  <span class="node-label">상승(55m)</span>
-                </div>
-                <div class="timeline-line"></div>
-                <div class="timeline-node">
-                  <div class="node-dot"></div>
-                  <span class="node-label">선회(Orbit)</span>
-                </div>
-                <div class="timeline-line"></div>
-                <div class="timeline-node">
-                  <div class="node-dot"></div>
-                  <span class="node-label">복귀(RTH)</span>
-                </div>
-                <div class="timeline-line"></div>
-                <div class="timeline-node">
-                  <div class="node-dot"></div>
-                  <span class="node-label">착륙완료</span>
-                </div>
+                <span style="font-size:11px; background:#eff6ff; color:#1d4ed8; font-weight:700; padding:2px 8px; border-radius:10px;">실시간 연동</span>
               </div>
 
-              <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748b; margin-top:14px; padding-top:10px; border-top:1px solid #f1f5f9;">
-                <span>🛫 Take off: <b id="cinemaTakeoffTxt">15:30</b></span>
-                <span>⏱️ ETA: <b id="cinemaEtaTxt">15:52</b></span>
-                <span>📍 Gate: <b id="cinemaGateTxt">WP-02</b></span>
-              </div>
-            </div>
-
-            <!-- Card 2: Battery & Energy Dynamics (Image 1 Middle-right Fuel Consumption Wave Chart style) -->
-            <div class="airaxis-card" style="padding:16px;">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                <div style="font-size:14px; font-weight:800; color:var(--navy);">Power &amp; Battery Dynamics</div>
-                <span style="font-size:11px; color:#94a3b8; cursor:pointer;">⤢</span>
-              </div>
-              <!-- Wave Chart SVG Graphic matching Image 1 -->
-              <div style="margin:10px 0 6px;">
-                <svg viewBox="0 0 280 80" style="width:100%; height:75px; display:block;">
-                  <defs>
-                    <linearGradient id="waveGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.25"/>
-                      <stop offset="100%" stop-color="#f59e0b" stop-opacity="0.0"/>
-                    </linearGradient>
-                  </defs>
-                  <!-- Vertical thin lines like Image 1 -->
-                  <line x1="20" y1="55" x2="20" y2="70" stroke="#fde68a" stroke-width="1.5"/>
-                  <line x1="60" y1="42" x2="60" y2="70" stroke="#fde68a" stroke-width="1.5"/>
-                  <line x1="100" y1="28" x2="100" y2="70" stroke="#fde68a" stroke-width="1.5"/>
-                  <line x1="140" y1="48" x2="140" y2="70" stroke="#fde68a" stroke-width="1.5"/>
-                  <line x1="180" y1="32" x2="180" y2="70" stroke="#fde68a" stroke-width="1.5"/>
-                  <line x1="220" y1="45" x2="220" y2="70" stroke="#fde68a" stroke-width="1.5"/>
-                  <line x1="260" y1="60" x2="260" y2="70" stroke="#fde68a" stroke-width="1.5"/>
-                  <!-- Wave fill -->
-                  <path d="M 0,65 Q 40,40 80,48 T 160,32 T 240,45 T 280,62 L 280,75 L 0,75 Z" fill="url(#waveGrad)"/>
-                  <!-- Wave path orange line -->
-                  <path d="M 0,65 Q 40,40 80,48 T 160,32 T 240,45 T 280,62" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round"/>
-                  <!-- Node circles with labels -->
-                  <circle cx="95" cy="45" r="4.5" fill="#f59e0b" stroke="#ffffff" stroke-width="2"/>
-                  <circle cx="195" cy="35" r="4.5" fill="#f59e0b" stroke="#ffffff" stroke-width="2"/>
-                </svg>
-              </div>
-              <div style="display:flex; justify-content:space-between; align-items:baseline; margin-top:4px;">
-                <div>
-                  <span style="font-size:18px; font-weight:800; color:var(--navy);" id="cinemaBatPct">62%</span>
-                  <span style="font-size:11px; color:#64748b;" id="cinemaBatSub"> 소모 예상</span>
-                </div>
-                <div style="font-size:11px; color:#64748b; display:flex; gap:8px;">
-                  <span>🔋 <b id="cinemaBatMah">5,200 mAh</b></span>
-                  <span>⏱️ <b id="cinemaBatTime">22분 가능</b></span>
-                  <span>📍 <b id="cinemaBatDist">3,850m</b></span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Card 3: [Image 2 Table Item 2] 프로젝트 생성 & QR 현장 연결 (Image 1 Pre-Flight Maintenance & Gauge style) -->
-            <div class="airaxis-card" style="padding:16px;">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <div style="font-size:14px; font-weight:800; color:var(--navy);">Pre-Flight &amp; Mobile Sync</div>
-                <span style="font-size:11px; color:#94a3b8; cursor:pointer;">≡</span>
-              </div>
-
-              <!-- Gauge & Readiness row matching Image 1 -->
-              <div style="display:flex; align-items:center; gap:14px; margin-bottom:12px; padding-bottom:12px; border-bottom:1px solid #f1f5f9;">
-                <!-- Semi-circle Gauge -->
-                <div style="width:70px; height:45px; position:relative; overflow:hidden; flex-shrink:0;">
-                  <svg viewBox="0 0 100 50" style="width:70px; height:35px;">
-                    <path d="M 10,50 A 40,40 0 0,1 90,50" fill="none" stroke="#e2e8f0" stroke-width="12" stroke-linecap="round"/>
-                    <path d="M 10,50 A 40,40 0 0,1 78,16" fill="none" stroke="#10b981" stroke-width="12" stroke-linecap="round"/>
-                  </svg>
-                  <div style="position:absolute; bottom:0; width:100%; text-align:center; font-size:13px; font-weight:800; color:var(--navy);" id="cinemaReadinessTxt">
-                    92%
-                  </div>
-                </div>
-                <div>
-                  <div style="font-size:12px; font-weight:800; color:#0f172a;">촬영 준비 완료율</div>
-                  <div style="font-size:11px; color:#64748b; margin-top:2px;">
-                    <span style="color:#ef4444; font-weight:700;">● Alerts: 0</span> · <span style="color:#f59e0b; font-weight:700;">● Minor Issues: 1</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- 계정 자동 연동 상태 카드 (QR 코드 제거) -->
+              <!-- 계정 자동 연동 상태 카드 -->
               <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:12px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                   <span style="font-size:11.5px; font-weight:800; color:#1e40af;">프로젝트 ID:</span>
