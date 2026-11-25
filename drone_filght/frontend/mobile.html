@@ -70,6 +70,8 @@
       <!-- Application 2: Yongsan (P-73 Prohibited) -->
       <div class="application" 
            data-id="APP-003"
+           data-project-id="2"
+           data-code="DRONE_002"
            data-lat="37.5365"
            data-lon="126.9771"
            data-title="용산 역사문화 랜드마크 기록" 
@@ -93,9 +95,11 @@
         <span class="arrow">›</span>
       </div>
 
-      <!-- Application 4: Campus Event (CTR Population) -->
+      <!-- Application 3: Campus Event (CTR Population) -->
       <div class="application" 
            data-id="APP-004"
+           data-project-id="102"
+           data-code="DRONE_003"
            data-lat="37.5586"
            data-lon="127.0493"
            data-title="졸업식 캠퍼스 항공 기록" 
@@ -119,9 +123,11 @@
         <span class="arrow">›</span>
       </div>
 
-      <!-- Application 5: Jeju Sunrise (Free Coastal) -->
+      <!-- Application 4: Jeju Sunrise (Free Coastal) -->
       <div class="application" 
            data-id="APP-005"
+           data-project-id="103"
+           data-code="DRONE_004"
            data-lat="33.4584"
            data-lon="126.9425"
            data-title="제주 성산일출봉 해안 절경" 
@@ -884,71 +890,6 @@ function attachApplicationClickHandlers() {
   });
 }
 attachApplicationClickHandlers();
-
-async function loadDynamicProjectsFromBackend() {
-  try {
-    const base = getApiBaseUrl();
-    const token = localStorage.getItem('sky_auth_token');
-    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-    const res = await fetch(`${base}/api/mobile/projects`, { headers });
-    if (res.ok) {
-      const projects = await res.json();
-      if (Array.isArray(projects) && projects.length > 0) {
-        const appCard = document.getElementById('myApplicationsCard');
-        if (appCard) {
-          // [내 촬영 신청 목록 제한] 한강 수변, 용산 역사문화, 졸업식 캠퍼스, 제주 성산일출봉 4종만 허용
-          const ALLOWED_PROJECT_KEYWORDS = ['한강 수변', '용산 역사문화', '졸업식 캠퍼스', '제주 성산일출봉'];
-          projects.forEach(p => {
-            const pId = p.id || p.project_id;
-            const title = p.title || '';
-            const place = p.place_name || '';
-            const isAllowed = ALLOWED_PROJECT_KEYWORDS.some(k => title.includes(k) || place.includes(k));
-            if (!isAllowed) return; // 4종 외 나머지 촬영 신청은 표시하지 않고 제외
-
-            const existing = document.querySelector(`.application[data-project-id="${pId}"]`);
-            if (!existing && pId !== 1) { // 1 is default Hangang
-              const newCard = document.createElement('div');
-              newCard.className = 'application';
-              newCard.dataset.id = `PROJ-${pId}`;
-              newCard.dataset.projectId = String(pId);
-              newCard.dataset.code = p.project_code || `DRONE_${pId}`;
-              newCard.dataset.lat = String(p.latitude || 37.5284);
-              newCard.dataset.lon = String(p.longitude || 126.9328);
-              newCard.dataset.title = p.title || '촬영 프로젝트';
-              newCard.dataset.purpose = p.recommended_mode || '경관·여행';
-              newCard.dataset.place = p.place_name || '서울 한강공원';
-              newCard.dataset.zone = '서울 관제권 (CTR) · 사전 비행승인 필요';
-              newCard.dataset.suitability = 'CAUTION';
-              newCard.dataset.score = '88';
-              newCard.dataset.date = p.target_date || '2026-11-22';
-              newCard.dataset.time = p.target_time || '15:30 ~ 17:30';
-              newCard.dataset.drone = '스마트폰 모사 (PHONE_GPS)';
-              newCard.dataset.intent = p.scene_intent || '시네마틱 촬영';
-              newCard.dataset.concept = p.recommended_mode || '기본 구도 가이드';
-              newCard.dataset.camera = `${p.recommended_shutter || '1/50s'} · ${p.recommended_nd_filter || 'ND16'}`;
-              newCard.dataset.tags = '스마트폰촬영,PHONE_GPS,AI구도가이드';
-              newCard.innerHTML = `
-                <div>
-                  <h3>${p.title}</h3>
-                  <p>${p.place_name} · ${p.target_date || ''}</p>
-                </div>
-                <span class="badge" style="background:#eff6ff; color:#1d4ed8;">✨ PC 생성</span>
-                <span class="arrow">›</span>
-              `;
-              const firstApp = appCard.querySelector('.application');
-              if (firstApp) appCard.insertBefore(newCard, firstApp);
-              else appCard.appendChild(newCard);
-            }
-          });
-          attachApplicationClickHandlers();
-        }
-      }
-    }
-  } catch (err) {
-    console.warn('서버 프로젝트 동적 로드 예외:', err);
-  }
-}
-loadDynamicProjectsFromBackend();
 
 const btnLaunchCam = $('btnLaunchCameraWithApp');
 if (btnLaunchCam) {

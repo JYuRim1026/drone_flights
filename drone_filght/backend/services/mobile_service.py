@@ -42,27 +42,14 @@ except Exception:
 class MobileService:
     @staticmethod
     def get_mobile_projects(db: Session) -> List[ShootingProject]:
-        projects = db.query(ShootingProject).order_by(ShootingProject.id.desc()).all()
-        # Seed a default project if none exists (matches user's mobile app!)
-        if not projects:
-            default_p = ShootingProject(
-                title="한강 도시 풍경 촬영",
-                place_name="서울 한강공원",
-                target_date="2026년 10월 24일",
-                target_time="오후 14:00 ~ 16:00",
-                scene_intent="한강을 따라 이동하며 도시의 넓은 풍경과 석양 분위기를 시네마틱하게 담고 싶어요.",
-                latitude=37.5284,
-                longitude=126.9328,
-                recommended_mode="패럴랙스 리빌 & 선셋 아크",
-                recommended_shutter="1/50s",
-                recommended_nd_filter="ND16",
-                status="READY"
-            )
-            db.add(default_p)
-            db.commit()
-            db.refresh(default_p)
-            projects = [default_p]
-        return projects
+        # 모바일 '내 촬영 신청 목록' 4대 기본 프로젝트(한강 수변, 용산, 졸업식 캠퍼스, 제주 성산일출봉)만 반환
+        allowed_keywords = ["한강 수변", "용산", "졸업식 캠퍼스", "성산일출봉"]
+        all_projects = db.query(ShootingProject).order_by(ShootingProject.id.asc()).all()
+        filtered = [
+            p for p in all_projects
+            if any(k in (p.title or "") or k in (p.place_name or "") for k in allowed_keywords)
+        ]
+        return filtered
 
     @staticmethod
     def get_mobile_project_detail(db: Session, project_id: int) -> Dict[str, Any]:
