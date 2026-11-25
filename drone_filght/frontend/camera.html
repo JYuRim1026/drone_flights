@@ -469,8 +469,15 @@ body{margin:0;background:#080d16;color:#fff;font-family:system-ui,-apple-system,
     
     <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:6px;">
       <select id="selectPurpose" style="flex:1 1 180px; border:1px solid #334155; border-radius:8px; padding:6px 8px; font-size:12px; font-weight:700; color:#f8fafc; background:#1e293b;">
-        <optgroup label="📱 스마트폰 지원 기법">
-          <option value="orbit" selected>📱 🏛️ 오빗(원형 회전) 촬영</option>
+        <optgroup label="🎯 5대 기본 촬영 기법 (Phase 12)">
+          <option value="FORWARD" selected>🎯 FORWARD (전진 촬영: 피사체 직선 접근)</option>
+          <option value="LATERAL">↔️ LATERAL (측면 이동: 피사체 좌우 추적)</option>
+          <option value="DIAGONAL_REVEAL">↗️ DIAGONAL_REVEAL (사선 리빌: 전경 연출)</option>
+          <option value="ORBIT">🔄 ORBIT (반원 회전: 피사체 180° 선회)</option>
+          <option value="PANORAMA">🌐 PANORAMA (고정 파노라마: 제자리 회전)</option>
+        </optgroup>
+        <optgroup label="📱 스마트폰 기존 촬영 기법">
+          <option value="orbit">📱 🏛️ 오빗(원형 회전) 촬영</option>
           <option value="dronie">📱 🌅 직선 드로니(후방 후진) 촬영</option>
           <option value="thirds">📱 🚶 피사체 삼분할 추적 촬영</option>
           <option value="reveal">📱 🌲 전경 장애물 리빌 촬영</option>
@@ -566,19 +573,41 @@ body{margin:0;background:#080d16;color:#fff;font-family:system-ui,-apple-system,
           <div id="aiResultCompCoords" style="font-size:9.5px; color:#94a3b8; margin-top:3px;">-</div>
         </div>
 
-        <!-- 추천 촬영 기법 (Recommended Technique) -->
+        <!-- 5대 기본 촬영 기법 추천 및 경로/회전 안내 (Step 5) -->
         <div style="background:#131e32; border:1px solid #1e3a5f; border-radius:6px; padding:6px 8px; margin-bottom:8px;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-            <span style="font-weight:700; color:#a78bfa; font-size:10.5px;">🎬 추천 촬영 기법 (AI 감독 제안)</span>
+            <div style="display:flex; align-items:center; gap:5px;">
+              <span style="font-weight:700; color:#a78bfa; font-size:10.5px;">🎬 1순위 추천 기법 (5종 통합)</span>
+              <span id="aiResultTechBadge" style="font-size:9.5px; font-weight:700; padding:1px 6px; border-radius:4px; background:#7c3aed; color:#fff;">FORWARD</span>
+            </div>
             <button type="button" id="btnApplyRecommendedTech" style="border:1px solid #8b5cf6; background:linear-gradient(135deg, #7c3aed, #6d28d9); color:#ffffff; font-size:10px; font-weight:700; padding:3px 8px; border-radius:4px; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,0.3);">
               이 기법 적용
             </button>
           </div>
-          <div style="display:flex; align-items:center; gap:6px; margin-bottom:2px;">
-            <span id="aiResultTechName" style="font-weight:700; color:#e9d5ff; font-size:11px;">-</span>
-            <span id="aiResultTechScore" style="font-size:9.5px; font-weight:700; padding:1px 5px; border-radius:3px; background:#4c1d95; color:#ddd6fe;">적합도 90%</span>
+          <div style="display:flex; align-items:center; gap:6px; margin-bottom:3px; flex-wrap:wrap;">
+            <span id="aiResultTechName" style="font-weight:700; color:#e9d5ff; font-size:11.5px;">전진 촬영 (FORWARD)</span>
+            <span id="aiResultTechScore" style="font-size:9.5px; font-weight:700; padding:1px 5px; border-radius:3px; background:#4c1d95; color:#ddd6fe;">적합도 92.0점</span>
+            <span id="aiResultTechFeasible" style="font-size:9.5px; font-weight:700; padding:1px 5px; border-radius:3px; background:#065f46; color:#6ee7b7;">실행 가능</span>
           </div>
-          <div id="aiResultTechReason" style="font-size:10px; color:#cbd5e1;">-</div>
+          <div id="aiResultTechReason" style="font-size:10px; color:#cbd5e1; margin-bottom:4px;">단일 피사체/건축물 정면 구도 · 전방 직선 보행 여유 확보</div>
+
+          <!-- 촬영 방향 및 이동 방향 -->
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px; margin-top:5px; font-size:10px; background:#0d1829; padding:5px 6px; border-radius:4px; border:1px solid #1e293b;">
+            <div><span style="color:#93c5fd; font-weight:600;">📷 촬영 방향:</span> <span id="aiResultShootingDir" style="color:#e2e8f0;">피사체 정면 락온</span></div>
+            <div><span style="color:#34d399; font-weight:600;">🚶 이동 방향:</span> <span id="aiResultMovementDir" style="color:#e2e8f0;">직선 전진 접근</span></div>
+          </div>
+
+          <!-- 추천 경로 또는 회전 안내 상세 -->
+          <div id="aiResultPathBox" style="margin-top:5px; font-size:10px; background:#0b1322; border-left:3px solid #3b82f6; padding:5px 6px; border-radius:3px; color:#cbd5e1;">
+            <div id="aiResultPathSummary" style="font-weight:600; color:#60a5fa;">📍 추천 경로: 지상 약 10.0m (5개 웨이포인트)</div>
+            <div id="aiResultPathSafety" style="font-size:9.5px; color:#fbbf24; margin-top:2px;">⚠️ [보행 안전] 전방 지형 및 주변 장애물을 반드시 육안으로 확인하세요.</div>
+          </div>
+
+          <!-- 실행 불가 사유 및 대체 추천 안내 박스 (조건부 표시) -->
+          <div id="aiResultUnexecutableBox" style="display:none; margin-top:5px; font-size:10px; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.3); border-radius:4px; padding:5px 6px; color:#fca5a5;">
+            <div id="aiResultUnexecutableReason">⚠️ ORBIT 실행 불가: 피사체 실측 GPS 미등록</div>
+            <div id="aiResultFallbackTech" style="color:#fde047; margin-top:2px; font-weight:600;">대체 추천: 전진 촬영 (FORWARD)</div>
+          </div>
         </div>
 
         <!-- 시각적 주의사항 (Visual Hazards) -->
@@ -1306,27 +1335,33 @@ function applyAiAnalysisToUI(analysis) {
       wTextEl.textContent = wg.walking_message || '스마트폰 GPS 경로 추적 중';
     }
     if (wBadgeEl) {
-      let reachedTag = '';
-      if (wg.is_waypoint_reached) {
-        reachedTag = ' (도착 ✓)';
-      } else if (consecutiveArrivalHits === 1) {
-        reachedTag = ' (도착 확인 중...)';
-      }
-      wBadgeEl.textContent = `WP ${wg.target_waypoint_seq}/${wg.total_waypoints}${reachedTag}`;
-
-      if (wg.is_waypoint_reached) {
-        wBadgeEl.style.background = '#059669';
-        wBadgeEl.style.color = '#ffffff';
-        if (activeWaypointSeq < wg.total_waypoints) {
-          activeWaypointSeq = wg.target_waypoint_seq + 1;
-          consecutiveArrivalHits = 0;
-        }
-      } else if (wg.distance_m === null) {
-        wBadgeEl.style.background = '#b45309';
+      if (wg.is_stationary) {
+        wBadgeEl.textContent = '제자리 회전';
+        wBadgeEl.style.background = '#7c3aed';
         wBadgeEl.style.color = '#ffffff';
       } else {
-        wBadgeEl.style.background = '#1e293b';
-        wBadgeEl.style.color = '#38bdf8';
+        let reachedTag = '';
+        if (wg.is_waypoint_reached) {
+          reachedTag = ' (도착 ✓)';
+        } else if (consecutiveArrivalHits === 1) {
+          reachedTag = ' (도착 확인 중...)';
+        }
+        wBadgeEl.textContent = `WP ${wg.target_waypoint_seq}/${wg.total_waypoints}${reachedTag}`;
+
+        if (wg.is_waypoint_reached) {
+          wBadgeEl.style.background = '#059669';
+          wBadgeEl.style.color = '#ffffff';
+          if (activeWaypointSeq < wg.total_waypoints) {
+            activeWaypointSeq = wg.target_waypoint_seq + 1;
+            consecutiveArrivalHits = 0;
+          }
+        } else if (wg.distance_m === null) {
+          wBadgeEl.style.background = '#b45309';
+          wBadgeEl.style.color = '#ffffff';
+        } else {
+          wBadgeEl.style.background = '#1e293b';
+          wBadgeEl.style.color = '#38bdf8';
+        }
       }
     }
   }
@@ -2105,25 +2140,31 @@ const purposeToTechniqueMap = {
 };
 
 const techniqueToPurposeMap = {
-  'orbit_poi': 'orbit',
-  'straight_dronie': 'dronie',
-  'active_track_thirds': 'thirds',
-  'reveal_obstacle': 'reveal',
-  'low_angle_ground': 'low_angle',
-  'negative_space_landscape': 'landscape',
-  'symmetry_reflection': 'symmetry',
-  'top_down_overhead': 'top_down',
-  'high_spiral': 'spiral',
-  'high_speed_flyby': 'flyby',
+  // 5대 기본 기법 (Phase 12)
+  'FORWARD': 'FORWARD',
+  'LATERAL': 'LATERAL',
+  'DIAGONAL_REVEAL': 'DIAGONAL_REVEAL',
+  'ORBIT': 'ORBIT',
+  'PANORAMA': 'PANORAMA',
+  'orbit_poi': 'ORBIT',
+  'straight_dronie': 'FORWARD',
+  'active_track_thirds': 'LATERAL',
+  'reveal_obstacle': 'DIAGONAL_REVEAL',
+  'low_angle_ground': 'FORWARD',
+  'negative_space_landscape': 'PANORAMA',
+  'symmetry_reflection': 'PANORAMA',
+  'top_down_overhead': 'FORWARD',
+  'high_spiral': 'ORBIT',
+  'high_speed_flyby': 'FORWARD',
   // 보조 및 약칭 매핑
-  'orbit': 'orbit',
-  'dronie': 'dronie',
-  'thirds': 'thirds',
-  'reveal': 'reveal',
-  'low_angle': 'low_angle',
-  'landscape': 'landscape',
-  'symmetry': 'symmetry',
-  'line': 'thirds'
+  'orbit': 'ORBIT',
+  'dronie': 'FORWARD',
+  'thirds': 'LATERAL',
+  'reveal': 'DIAGONAL_REVEAL',
+  'low_angle': 'FORWARD',
+  'landscape': 'PANORAMA',
+  'symmetry': 'PANORAMA',
+  'line': 'LATERAL'
 };
 
 // URL ?technique=... 파라미터 연동
@@ -2686,18 +2727,45 @@ function applyPreVideoCompositionToReticle(comp) {
   }
 }
 
-// AI 추천 촬영 기법을 촬영 목적 선택 UI(#selectPurpose)에 수동 반영
-function applyPreVideoRecommendedTechnique(techKey, techName) {
+// AI 추천 촬영 기법을 촬영 목적 선택 UI(#selectPurpose) 및 보행 가이드에 반영
+function applyPreVideoRecommendedTechnique(techKey, techName, pathData) {
   if (!selectPurp) return;
   const mapped = techniqueToPurposeMap[techKey] || techKey;
   const optionExists = Array.from(selectPurp.options).some(opt => opt.value === mapped);
   if (optionExists) {
     selectPurp.value = mapped;
+    currentPurpose = mapped;
     selectPurp.dispatchEvent(new Event('change'));
-    showToast(`✓ AI 추천 기법 [${techName || mapped}]이(가) 촬영 가이드에 적용되었습니다.`, 'success');
-  } else {
-    showToast(`⚠️ 기법 [${techName || techKey}]을(를) 스마트폰 촬영 목록에서 찾을 수 없습니다.`, 'warning');
   }
+
+  // 경로 데이터가 존재하면 보행 안내 카드 즉시 동기화
+  const pData = pathData || latestPreVideoRecommendedTechnique?.path_data;
+  if (pData) {
+    const walkingText = document.getElementById('walkingGuideText');
+    const walkingBadge = document.getElementById('walkingBadge');
+    const walkingSafety = document.getElementById('walkingSafetyWarning');
+
+    if (mapped === 'PANORAMA' || pData.is_stationary) {
+      if (walkingText) walkingText.textContent = '제자리 회전 모드: 보행 없이 천천히 회전하세요';
+      if (walkingBadge) {
+        walkingBadge.textContent = '제자리 회전';
+        walkingBadge.style.background = '#7c3aed';
+        walkingBadge.style.color = '#ffffff';
+      }
+      if (walkingSafety) walkingSafety.textContent = pData.safety_notice || '⚠️ [회전 안전] 제자리 회전 시 발밑 지형을 확인하세요.';
+    } else if (pData.waypoints && pData.waypoints.length > 0) {
+      const wp1 = pData.waypoints[0];
+      if (walkingText) walkingText.textContent = wp1.guide_msg || `1번 지점을 향해 전진 이동하세요 (${pData.total_distance_m}m)`;
+      if (walkingBadge) {
+        walkingBadge.textContent = `WP 1/${pData.waypoints.length}`;
+        walkingBadge.style.background = '#1e293b';
+        walkingBadge.style.color = '#38bdf8';
+      }
+      if (walkingSafety) walkingSafety.textContent = pData.safety_notice || '⚠️ [보행 안전] 전방 지형을 반드시 육안으로 확인하세요.';
+    }
+  }
+
+  showToast(`✓ AI 추천 기법 [${techName || mapped}]이(가) 촬영 가이드에 적용되었습니다.`, 'success');
 }
 
 // AI 분석 결과를 상세 패널에 표시
@@ -2756,27 +2824,147 @@ function renderPreVideoAnalysisResult(analysis, dbSaved, assetId, pId) {
   // 타깃 레티클에 추천 구도 좌표 기본 반영
   applyPreVideoCompositionToReticle(comp);
 
-  // 6. 추천 촬영 기법
-  const techs = analysis.pre_video_analysis?.recommended_techniques || [];
-  const topTech = techs.length > 0 ? techs[0] : null;
-  latestPreVideoRecommendedTechnique = topTech;
+  // 6. 5대 기본 촬영 기법 추천 (Step 5)
+  const techRec = analysis.technique_recommendation || analysis.pre_video_analysis?.technique_recommendation;
+  const pathGen = analysis.recommended_path || analysis.pre_video_analysis?.recommended_path;
 
-  if (topTech) {
-    if (aiResultTechName) {
-      aiResultTechName.textContent = topTech.technique_name || topTech.technique_key || '추천 기법';
+  let topTechId = 'FORWARD';
+  let topTechName = '전진 촬영 (FORWARD)';
+  let topTechScore = 90.0;
+  let topTechReason = '피사체 중심 직선 접근 촬영에 적합합니다.';
+  let topTechGuideMsg = '피사체를 바라보며 천천히 앞으로 이동하세요.';
+  let isExecutable = true;
+  let feasibilityReason = '전방 직선 접근 이동 가능';
+  let unexecutableReason = '';
+  let fallbackTechName = '';
+
+  if (techRec) {
+    topTechId = techRec.recommended_technique || 'FORWARD';
+    const topCand = (techRec.candidates || []).find(c => c.technique_id === topTechId) || (techRec.candidates || [])[0];
+    if (topCand) {
+      topTechName = `${topCand.name} (${topCand.technique_id})`;
+      topTechScore = topCand.score || 90.0;
+      topTechReason = topCand.recommendation_reason || topTechReason;
+      topTechGuideMsg = topCand.guide_message || topTechGuideMsg;
+      isExecutable = topCand.is_executable;
+      feasibilityReason = topCand.feasibility_reason || '';
     }
-    if (aiResultTechScore) {
-      aiResultTechScore.textContent = `적합도 ${topTech.fit_score || 90}%`;
-    }
-    if (aiResultTechReason) {
-      aiResultTechReason.textContent = topTech.reason || '현재 피사체 배치와 공간감 연출에 적합합니다.';
-    }
-    if (btnApplyRecommendedTech) {
-      btnApplyRecommendedTech.style.display = 'inline-block';
+
+    // ORBIT 등 실행 불가 후보 탐색 및 대체 추천 안내
+    const orbitCand = (techRec.candidates || []).find(c => c.technique_id === 'ORBIT');
+    if (orbitCand && !orbitCand.is_executable) {
+      unexecutableReason = `⚠️ ORBIT(반원 회전) 조건 미충족: ${orbitCand.feasibility_reason || '피사체 실측 GPS 미확인'}`;
+      fallbackTechName = `대체 추천: [${topCand ? topCand.name : '전진 촬영'}] 자동 선정`;
     }
   } else {
-    if (btnApplyRecommendedTech) {
-      btnApplyRecommendedTech.style.display = 'none';
+    // Legacy fallback
+    const legacyTechs = analysis.pre_video_analysis?.recommended_techniques || [];
+    if (legacyTechs.length > 0) {
+      const lt = legacyTechs[0];
+      topTechId = lt.technique_key || 'FORWARD';
+      topTechName = lt.technique_name || '추천 기법';
+      topTechScore = lt.fit_score || 90;
+      topTechReason = lt.reason || topTechReason;
+    }
+  }
+
+  latestPreVideoRecommendedTechnique = {
+    technique_key: topTechId,
+    technique_name: topTechName,
+    path_data: pathGen
+  };
+
+  // 1순위 추천 기법 배지 및 정보 표시
+  const elTechBadge = document.getElementById('aiResultTechBadge');
+  const elTechName = document.getElementById('aiResultTechName');
+  const elTechScore = document.getElementById('aiResultTechScore');
+  const elTechReason = document.getElementById('aiResultTechReason');
+  const elTechFeasible = document.getElementById('aiResultTechFeasible');
+
+  if (elTechBadge) elTechBadge.textContent = topTechId;
+  if (elTechName) elTechName.textContent = topTechName;
+  if (elTechScore) elTechScore.textContent = `적합도 ${topTechScore}점`;
+  if (elTechReason) elTechReason.textContent = topTechReason;
+
+  if (elTechFeasible) {
+    if (isExecutable) {
+      elTechFeasible.textContent = '실행 가능';
+      elTechFeasible.style.background = '#065f46';
+      elTechFeasible.style.color = '#6ee7b7';
+    } else {
+      elTechFeasible.textContent = '조건 미충족 (대체 적용)';
+      elTechFeasible.style.background = '#7f1d1d';
+      elTechFeasible.style.color = '#fca5a5';
+    }
+  }
+
+  // 촬영 방향 및 이동 방향
+  const elShootingDir = document.getElementById('aiResultShootingDir');
+  const elMovementDir = document.getElementById('aiResultMovementDir');
+
+  let shootDirText = '피사체 정면 락온 (수평 0°)';
+  let moveDirText = '직선 전진 접근';
+  if (topTechId === 'LATERAL') {
+    shootDirText = '피사체 화면 유지 (측면 락온)';
+    moveDirText = '좌우 평행 측면 이동';
+  } else if (topTechId === 'DIAGONAL_REVEAL') {
+    shootDirText = '전경 너머 피사체 대면';
+    moveDirText = '사선 대각선 이동 (장애물 주의)';
+  } else if (topTechId === 'ORBIT') {
+    shootDirText = '피사체 중심점 정조준';
+    moveDirText = '반원 호 선회 이동';
+  } else if (topTechId === 'PANORAMA') {
+    shootDirText = '수평선 0도 파노라마 조망';
+    moveDirText = '보행 없음 (제자리 회전)';
+  }
+
+  if (elShootingDir) elShootingDir.textContent = shootDirText;
+  if (elMovementDir) elMovementDir.textContent = moveDirText;
+
+  // 추천 경로 또는 회전 안내 박스
+  const elPathBox = document.getElementById('aiResultPathBox');
+  const elPathSummary = document.getElementById('aiResultPathSummary');
+  const elPathSafety = document.getElementById('aiResultPathSafety');
+
+  if (elPathBox) {
+    elPathBox.style.display = 'block';
+    if (topTechId === 'PANORAMA' || (pathGen && pathGen.is_stationary)) {
+      if (elPathSummary) {
+        elPathSummary.textContent = `📍 제자리 회전 안내: 회전각 ${(pathGen && pathGen.total_rotation_deg) || 120}° (보행 웨이포인트 0개)`;
+      }
+      if (elPathSafety) {
+        elPathSafety.textContent = (pathGen && pathGen.safety_notice) || '⚠️ [회전 안전] 제자리 회전 시 발밑 지형 및 주변 장애물을 육안으로 확인하세요.';
+      }
+    } else if (pathGen && pathGen.waypoints) {
+      const wps = pathGen.waypoints || [];
+      const distM = pathGen.total_distance_m ? pathGen.total_distance_m.toFixed(1) : '10.0';
+      if (elPathSummary) {
+        elPathSummary.textContent = `📍 추천 이동 경로: 지상 약 ${distM}m (${wps.length}개 웨이포인트)`;
+      }
+      if (elPathSafety) {
+        elPathSafety.textContent = pathGen.safety_notice || '⚠️ [보행 안전] 이동 시 전방 및 주변 장애물을 반드시 육안으로 확인하세요.';
+      }
+    } else {
+      if (elPathSummary) {
+        elPathSummary.textContent = `📍 추천 이동 경로: ${topTechGuideMsg}`;
+      }
+      if (elPathSafety) {
+        elPathSafety.textContent = '⚠️ [보행 안전] 이동 시 전방 및 주변 장애물을 반드시 육안으로 확인하세요.';
+      }
+    }
+  }
+
+  // 실행 불가 및 대체 안내 박스
+  const elUnexecBox = document.getElementById('aiResultUnexecutableBox');
+  const elUnexecReason = document.getElementById('aiResultUnexecutableReason');
+  const elFallbackTech = document.getElementById('aiResultFallbackTech');
+  if (elUnexecBox) {
+    if (unexecutableReason) {
+      elUnexecBox.style.display = 'block';
+      if (elUnexecReason) elUnexecReason.textContent = unexecutableReason;
+      if (elFallbackTech) elFallbackTech.textContent = fallbackTechName;
+    } else {
+      elUnexecBox.style.display = 'none';
     }
   }
 
@@ -2954,7 +3142,8 @@ if (btnApplyRecommendedTech) {
     if (!latestPreVideoRecommendedTechnique) return;
     const key = latestPreVideoRecommendedTechnique.technique_key;
     const name = latestPreVideoRecommendedTechnique.technique_name;
-    applyPreVideoRecommendedTechnique(key, name);
+    const pathData = latestPreVideoRecommendedTechnique.path_data;
+    applyPreVideoRecommendedTechnique(key, name, pathData);
   });
 }
 

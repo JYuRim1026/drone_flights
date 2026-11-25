@@ -67,33 +67,7 @@
         <span class="arrow">›</span>
       </div>
 
-      <!-- Application 2: Gimcheon (G Airspace - Free) -->
-      <div class="application" 
-           data-id="APP-002"
-           data-lat="36.1305"
-           data-lon="128.1720"
-           data-title="김천 혁신도시 건축물 360° 촬영" 
-           data-purpose="시설물·자연" 
-           data-place="경북 김천시 율곡동 (혁신도시)" 
-           data-zone="비관제공역 (G공역) · 비행승인 면제"
-           data-suitability="SUITABLE"
-           data-score="96"
-           data-date="2026년 10월 28일" 
-           data-time="오전 11:00 ~ 13:00 (주간 시계비행)" 
-           data-drone="DJI Mini 3 Pro (249g)"
-           data-intent="혁신도시 공공기관 건물과 주변 녹지 공간을 360도 회전 궤적으로 기록하고 싶습니다."
-           data-concept="POI Orbit (360도 피사체 회전) + 45도 하향 버드아이 뷰 앵글"
-           data-camera="4K 30fps · 셔터 1/120s · ISO 100 · CPL 편광 필터"
-           data-tags="250g이하자유비행,비행승인면제구역,시계비행준수,안전거리확보">
-        <div>
-          <h3>김천 혁신도시 건축물 360° 촬영</h3>
-          <p>시설물·자연 · 김천 율곡동 · 10.28</p>
-        </div>
-        <span class="badge" style="background:#e5f8ef; color:#087e50;">🟢 비행 적합</span>
-        <span class="arrow">›</span>
-      </div>
-
-      <!-- Application 3: Yongsan (P-73 Prohibited) -->
+      <!-- Application 2: Yongsan (P-73 Prohibited) -->
       <div class="application" 
            data-id="APP-003"
            data-lat="37.5365"
@@ -922,8 +896,15 @@ async function loadDynamicProjectsFromBackend() {
       if (Array.isArray(projects) && projects.length > 0) {
         const appCard = document.getElementById('myApplicationsCard');
         if (appCard) {
+          // [내 촬영 신청 목록 제한] 한강 수변, 용산 역사문화, 졸업식 캠퍼스, 제주 성산일출봉 4종만 허용
+          const ALLOWED_PROJECT_KEYWORDS = ['한강 수변', '용산 역사문화', '졸업식 캠퍼스', '제주 성산일출봉'];
           projects.forEach(p => {
             const pId = p.id || p.project_id;
+            const title = p.title || '';
+            const place = p.place_name || '';
+            const isAllowed = ALLOWED_PROJECT_KEYWORDS.some(k => title.includes(k) || place.includes(k));
+            if (!isAllowed) return; // 4종 외 나머지 촬영 신청은 표시하지 않고 제외
+
             const existing = document.querySelector(`.application[data-project-id="${pId}"]`);
             if (!existing && pId !== 1) { // 1 is default Hangang
               const newCard = document.createElement('div');

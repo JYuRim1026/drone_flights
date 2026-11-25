@@ -762,7 +762,60 @@ def analyze_location_asset_keyframes(
     raw_hazards = raw_parsed.get("visual_hazards") or []
     validated_hazards = [str(h).strip() for h in raw_hazards if str(h).strip()] if isinstance(raw_hazards, list) else []
 
-    # 8. 최종 구조화된 특징 메타데이터 구성 (기존 ai_service L750 호환을 위해 name/title 최상위 유지)
+    # 8. 5대 기본 촬영 기법(FORWARD, LATERAL, DIAGONAL_REVEAL, ORBIT, PANORAMA) 추천 점수 엔진 연동
+    from backend.services.technique_service import technique_service
+    from backend.services.path_service import path_service
+
+    scene_input = {
+        "scene_type": scene_type_val,
+        "main_subject": name_val,
+        "foreground": validated_depth.get("foreground", ""),
+        "midground": validated_depth.get("midground", ""),
+        "background": validated_depth.get("background", ""),
+        "open_space": summary_val,
+        "obstacle_level": "HIGH" if any("장애물" in str(h) or "전선" in str(h) for h in validated_hazards) else ("MEDIUM" if validated_hazards else "NONE"),
+        "subject_visibility": "CLEAR"
+    }
+
+    # LocationAsset 및 Project에 등록된 GPS 좌표 탐색
+    poi_lat = None
+    poi_lng = None
+    if asset.detected_features and isinstance(asset.detected_features, dict):
+        poi_lat = asset.detected_features.get("lat")
+        poi_lng = asset.detected_features.get("lng")
+    if poi_lat is None and project:
+        poi_lat = getattr(project, "target_lat", None)
+        poi_lng = getattr(project, "target_lng", None)
+
+    route_constraints = {
+        "has_subject_gps": (poi_lat is not None and poi_lng is not None),
+        "subject_lat": poi_lat,
+        "subject_lng": poi_lng
+    }
+
+    tech_rec = technique_service.recommend_technique(
+        scene_analysis=scene_input,
+        sensor_state={"has_gps": True, "gps_accuracy": 5.0},
+        route_constraints=route_constraints
+    )
+
+    top_tech_id = tech_rec.get("recommended_technique", "FORWARD")
+
+    # 기법별 독립 경로 또는 회전 가이드 생성
+    start_lat_val = poi_lat if poi_lat else 37.5284000
+    start_lon_val = (poi_lng - 0.0001) if poi_lng else 126.9328000
+
+    path_gen_res = path_service.generate_technique_path(
+        technique_id=top_tech_id,
+        start_lat=start_lat_val,
+        start_lon=start_lon_val,
+        heading_deg=0.0,
+        subject_lat=poi_lat,
+        subject_lon=poi_lng,
+        gps_accuracy=5.0
+    )
+
+    # 9. 최종 구조화된 특징 메타데이터 구성 (기존 ai_service L750 호환을 위해 name/title 최상위 유지)
     final_features = {
         "name": name_val,
         "title": title_val,
@@ -771,16 +824,20 @@ def analyze_location_asset_keyframes(
         "summary": summary_val,
         "analyzed_at": datetime.utcnow().isoformat(),
         "model_used": model_used,
+        "technique_recommendation": tech_rec,
+        "recommended_path": path_gen_res,
         "pre_video_analysis": {
             "detected_subjects": validated_subjects,
             "depth_layers": validated_depth,
             "recommended_composition": validated_comp,
             "recommended_techniques": validated_techs,
-            "visual_hazards": validated_hazards
+            "visual_hazards": validated_hazards,
+            "technique_recommendation": tech_rec,
+            "recommended_path": path_gen_res
         }
     }
 
-    # 9. 해당 LocationAsset의 detected_features만 안전하게 갱신 (다른 에셋 보존)
+    # 10. 해당 LocationAsset의 detected_features만 안전하게 갱신 (다른 에셋 보존)
     asset.detected_features = final_features
     db.commit()
     db.refresh(asset)
@@ -791,7 +848,9 @@ def analyze_location_asset_keyframes(
         "asset_id": asset_id,
         "model_used": model_used,
         "db_saved": True,
-        "analysis": final_features
+        "analysis": final_features,
+        "technique_recommendation": tech_rec,
+        "recommended_path": path_gen_res
     }
 
 

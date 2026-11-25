@@ -90,7 +90,434 @@ def extract_wp_coordinate(wp: Dict[str, Any]) -> Tuple[Optional[float], Optional
 
 
 # ===========================================================================
-# 2. 촬영 기법별 기본 권장 보행 경로 템플릿 생성
+# 2. 신규 5대 기법별 독립 지상 이동 경로 생성 엔진 (Phase 12 Step 2)
+# ===========================================================================
+def validate_gps_coordinate(lat: Any, lon: Any, accuracy: Optional[float] = None) -> Tuple[bool, str]:
+    """위경도 좌표 및 GPS 정확도 유효성 검증"""
+    if lat is None or lon is None:
+        return False, "GPS 좌표가 누락되었습니다."
+    try:
+        f_lat = float(lat)
+        f_lon = float(lon)
+    except (TypeError, ValueError):
+        return False, "GPS 좌표가 유효한 숫자 형식이 아닙니다."
+
+    if not (-90.0 <= f_lat <= 90.0 and -180.0 <= f_lon <= 180.0):
+        return False, f"GPS 좌표 범위 초과 (lat={f_lat}, lon={f_lon})"
+
+    if f_lat == 0.0 and f_lon == 0.0:
+        return False, "Null Island (0, 0) 비정상 GPS 좌표입니다."
+
+    if accuracy is not None:
+        try:
+            f_acc = float(accuracy)
+            if f_acc > 20.0:
+                return False, f"GPS 수신 오차 과다 (±{int(f_acc)}m > 20m)"
+        except (TypeError, ValueError):
+            pass
+
+    return True, "VALID"
+
+
+def generate_forward_path(
+    start_lat: float,
+    start_lon: float,
+    heading_deg: float = 0.0,
+    distance_m: float = 10.0,
+    count: int = 5,
+    subject_lat: Optional[float] = None,
+    subject_lon: Optional[float] = None,
+    gps_accuracy: Optional[float] = None
+) -> Dict[str, Any]:
+    """
+    [기법 1] FORWARD (전진 촬영)
+    피사체 방향으로 시선을 고정하고 천천히 직선으로 접근하는 지상 보행 경로 생성
+    """
+    is_valid, err_msg = validate_gps_coordinate(start_lat, start_lon, gps_accuracy)
+    if not is_valid:
+        return {
+            "technique": "FORWARD",
+            "name": "전진 촬영 (Forward Approach)",
+            "is_executable": False,
+            "reason": f"유효하지 않은 스마트폰 GPS 좌표입니다: {err_msg}",
+            "waypoints": []
+        }
+
+    count = max(3, min(10, int(count)))
+    dist_m = max(2.0, min(50.0, float(distance_m)))
+
+    # 피사체 실측 좌표가 제공된 경우 피사체 방향 방위각 산출
+    if subject_lat is not None and subject_lon is not None:
+        s_valid, _ = validate_gps_coordinate(subject_lat, subject_lon)
+        if s_valid:
+            sx, sy = lat_lon_to_meters(float(subject_lat), float(subject_lon), float(start_lat), float(start_lon))
+            bearing_rad = math.atan2(sx, sy)
+            eff_heading = (math.degrees(bearing_rad) + 360.0) % 360.0
+        else:
+            eff_heading = float(heading_deg) % 360.0
+            bearing_rad = math.radians(eff_heading)
+    else:
+        eff_heading = float(heading_deg) % 360.0
+        bearing_rad = math.radians(eff_heading)
+
+    dx = math.sin(bearing_rad)
+    dy = math.cos(bearing_rad)
+
+    wps = []
+    for i in range(count):
+        s = i / max(1, count - 1)
+        cur_d = dist_m * s
+        x = cur_d * dx
+        y = cur_d * dy
+        w_lat, w_lon = meters_to_lat_lon(x, y, float(start_lat), float(start_lon))
+        wps.append({
+            "seq": i + 1,
+            "lat": round(w_lat, 7),
+            "lng": round(w_lon, 7),
+            "target_heading": round(eff_heading, 1),
+            "target_pitch": -10.0,
+            "distance_from_start_m": round(cur_d, 2),
+            "action": "FORWARD_APPROACH",
+            "guide_msg": f"전진 접근 {i+1}단계: 피사체를 바라보며 천천히 앞으로 이동하세요 ({cur_d:.1f}m/{dist_m:.1f}m)"
+        })
+
+    return {
+        "technique": "FORWARD",
+        "name": "전진 촬영 (Forward Approach)",
+        "is_executable": True,
+        "total_distance_m": round(dist_m, 1),
+        "target_heading_deg": round(eff_heading, 1),
+        "requires_walking": True,
+        "waypoints": wps,
+        "safety_notice": "⚠️ [보행 안전 주의] 본 경로는 보행 가능 여부가 사전 검증된 도로가 아니므로, 이동 시 전방 및 주변 장애물을 반드시 육안으로 확인하세요."
+    }
+
+
+def generate_lateral_path(
+    start_lat: float,
+    start_lon: float,
+    heading_deg: float = 0.0,
+    lateral_dir: str = "right",
+    distance_m: float = 10.0,
+    count: int = 5,
+    subject_lat: Optional[float] = None,
+    subject_lon: Optional[float] = None,
+    gps_accuracy: Optional[float] = None
+) -> Dict[str, Any]:
+    """
+    [기법 2] LATERAL (측면 이동 촬영)
+    피사체를 화면에 유지하면서 시선 방향에 수직인 좌우 평행 지상 보행 경로 생성
+    """
+    is_valid, err_msg = validate_gps_coordinate(start_lat, start_lon, gps_accuracy)
+    if not is_valid:
+        return {
+            "technique": "LATERAL",
+            "name": "측면 이동 촬영 (Lateral Tracking)",
+            "is_executable": False,
+            "reason": f"유효하지 않은 스마트폰 GPS 좌표입니다: {err_msg}",
+            "waypoints": []
+        }
+
+    count = max(3, min(10, int(count)))
+    dist_m = max(2.0, min(50.0, float(distance_m)))
+    is_right = str(lateral_dir).lower() in ["right", "우측", "오른쪽"]
+    dir_name = "right" if is_right else "left"
+    dir_kor = "오른쪽" if is_right else "왼쪽"
+
+    # 전방 시선 방향 (facing subject)
+    eff_facing_heading = float(heading_deg) % 360.0
+    # 횡이동 각도 (수직 90도)
+    lat_angle_deg = (eff_facing_heading + (90.0 if is_right else -90.0) + 360.0) % 360.0
+    lat_angle_rad = math.radians(lat_angle_deg)
+
+    dx = math.sin(lat_angle_rad)
+    dy = math.cos(lat_angle_rad)
+
+    wps = []
+    for i in range(count):
+        s = i / max(1, count - 1)
+        cur_d = dist_m * s
+        x = cur_d * dx
+        y = cur_d * dy
+        w_lat, w_lon = meters_to_lat_lon(x, y, float(start_lat), float(start_lon))
+
+        # 피사체 실측 좌표가 있으면 피사체를 계속 바라보도록 target_heading 동적 계산
+        if subject_lat is not None and subject_lon is not None:
+            sx, sy = lat_lon_to_meters(float(subject_lat), float(subject_lon), w_lat, w_lon)
+            target_h = (math.degrees(math.atan2(sx, sy)) + 360.0) % 360.0
+        else:
+            target_h = eff_facing_heading
+
+        wps.append({
+            "seq": i + 1,
+            "lat": round(w_lat, 7),
+            "lng": round(w_lon, 7),
+            "target_heading": round(target_h, 1),
+            "target_pitch": -10.0,
+            "distance_from_start_m": round(cur_d, 2),
+            "action": "LATERAL_TRACK",
+            "guide_msg": f"측면 이동 {i+1}단계: 피사체를 화면에 유지하면서 {dir_kor}으로 이동하세요 ({cur_d:.1f}m/{dist_m:.1f}m)"
+        })
+
+    return {
+        "technique": "LATERAL",
+        "name": "측면 이동 촬영 (Lateral Tracking)",
+        "is_executable": True,
+        "lateral_direction": dir_name,
+        "total_distance_m": round(dist_m, 1),
+        "requires_walking": True,
+        "waypoints": wps,
+        "safety_notice": "⚠️ [보행 안전 주의] 측면으로 걷는 동안 발밑과 측면 장애물에 걸려 넘어지지 않도록 주변 환경을 수시로 육안 확인하세요."
+    }
+
+
+def generate_diagonal_reveal_path(
+    start_lat: float,
+    start_lon: float,
+    heading_deg: float = 0.0,
+    diagonal_side: str = "left",
+    forward_dist_m: float = 8.0,
+    lateral_dist_m: float = 6.0,
+    count: int = 5,
+    gps_accuracy: Optional[float] = None
+) -> Dict[str, Any]:
+    """
+    [기법 3] DIAGONAL_REVEAL (사선 리빌 촬영)
+    전경 요소를 벗어나며 배경을 드러내는 대각선 지상 보행 경로 생성 (촬영 연출 패턴)
+    """
+    is_valid, err_msg = validate_gps_coordinate(start_lat, start_lon, gps_accuracy)
+    if not is_valid:
+        return {
+            "technique": "DIAGONAL_REVEAL",
+            "name": "사선 리빌 촬영 (Diagonal Reveal)",
+            "is_executable": False,
+            "reason": f"유효하지 않은 스마트폰 GPS 좌표입니다: {err_msg}",
+            "waypoints": []
+        }
+
+    count = max(3, min(10, int(count)))
+    f_dist = max(1.0, min(30.0, float(forward_dist_m)))
+    l_dist = max(1.0, min(30.0, float(lateral_dist_m)))
+
+    is_left = str(diagonal_side).lower() in ["left", "좌측", "왼쪽"]
+    side_name = "left" if is_left else "right"
+    side_kor = "왼쪽" if is_left else "오른쪽"
+
+    f_rad = math.radians(float(heading_deg) % 360.0)
+    lat_angle = (float(heading_deg) + (-90.0 if is_left else 90.0) + 360.0) % 360.0
+    l_rad = math.radians(lat_angle)
+
+    fx = math.sin(f_rad)
+    fy = math.cos(f_rad)
+    lx = math.sin(l_rad)
+    ly = math.cos(l_rad)
+
+    total_hypot = math.hypot(f_dist, l_dist)
+
+    wps = []
+    for i in range(count):
+        s = i / max(1, count - 1)
+        cur_f = f_dist * s
+        cur_l = l_dist * s
+        x = (cur_f * fx) + (cur_l * lx)
+        y = (cur_f * fy) + (cur_l * ly)
+        w_lat, w_lon = meters_to_lat_lon(x, y, float(start_lat), float(start_lon))
+        cur_d = math.hypot(cur_f, cur_l)
+
+        wps.append({
+            "seq": i + 1,
+            "lat": round(w_lat, 7),
+            "lng": round(w_lon, 7),
+            "target_heading": round(float(heading_deg) % 360.0, 1),
+            "target_pitch": -10.0,
+            "distance_from_start_m": round(cur_d, 2),
+            "action": "DIAGONAL_REVEAL_WALK",
+            "guide_msg": f"사선 리빌 {i+1}단계: 전경을 벗어나도록 {side_kor} 앞 방향으로 이동하세요 ({cur_d:.1f}m/{total_hypot:.1f}m)"
+        })
+
+    return {
+        "technique": "DIAGONAL_REVEAL",
+        "name": "사선 리빌 촬영 (Diagonal Reveal)",
+        "is_executable": True,
+        "diagonal_side": side_name,
+        "total_distance_m": round(total_hypot, 1),
+        "requires_walking": True,
+        "waypoints": wps,
+        "safety_notice": "⚠️ [보행 안전 주의] 본 경로는 사선 이동을 이용한 촬영 연출 패턴이며, 실제 현장의 장애물 회피나 안전 통과를 보장하지 않습니다. 반드시 주변 장애물을 육안으로 확인하세요."
+    }
+
+
+def generate_orbit_path(
+    start_lat: float,
+    start_lon: float,
+    subject_lat: Optional[float] = None,
+    subject_lon: Optional[float] = None,
+    orbit_direction: str = "clockwise",
+    arc_angle_deg: float = 180.0,
+    count: int = 5,
+    space_confirmed: bool = True,
+    gps_accuracy: Optional[float] = None
+) -> Dict[str, Any]:
+    """
+    [기법 4] ORBIT (반원 회전 촬영)
+    피사체 실측 GPS 좌표 중심 반원(180도) 선회 지상 보행 경로 생성
+    조건 미충족 시(피사체 GPS 누락, 공간 미확인, GPS 오차 과다) 경로 생성을 엄격히 거부
+    """
+    is_valid, err_msg = validate_gps_coordinate(start_lat, start_lon, gps_accuracy)
+    if not is_valid:
+        return {
+            "technique": "ORBIT",
+            "name": "반원 회전 촬영 (Orbit Arc)",
+            "is_executable": False,
+            "reason": f"유효하지 않은 스마트폰 GPS 좌표입니다: {err_msg}",
+            "waypoints": []
+        }
+
+    # [핵심 검증 1] 피사체 실측 GPS 누락 시 임의 좌표 생성 금지 및 즉각 거부
+    if subject_lat is None or subject_lon is None:
+        return {
+            "technique": "ORBIT",
+            "name": "반원 회전 촬영 (Orbit Arc)",
+            "is_executable": False,
+            "reason": "피사체의 실제 GPS 실측 좌표가 확인되지 않아 반원 회전 경로 생성이 비활성화되었습니다. (임의 좌표 생성 금지)",
+            "waypoints": []
+        }
+
+    s_valid, s_err = validate_gps_coordinate(subject_lat, subject_lon)
+    if not s_valid:
+        return {
+            "technique": "ORBIT",
+            "name": "반원 회전 촬영 (Orbit Arc)",
+            "is_executable": False,
+            "reason": f"피사체 실측 GPS 좌표 오류: {s_err}",
+            "waypoints": []
+        }
+
+    # [핵심 검증 2] 주변 보행 공간 미확인 시 경로 생성 거부
+    if not space_confirmed:
+        return {
+            "technique": "ORBIT",
+            "name": "반원 회전 촬영 (Orbit Arc)",
+            "is_executable": False,
+            "reason": "피사체 주변의 안전한 반원 보행 공간이 확인되지 않아 경로 생성을 거부합니다.",
+            "waypoints": []
+        }
+
+    # [핵심 검증 3] 스마트폰 GPS 오차 20m 초과 시 경로 생성 거부
+    if gps_accuracy is not None and float(gps_accuracy) > 20.0:
+        return {
+            "technique": "ORBIT",
+            "name": "반원 회전 촬영 (Orbit Arc)",
+            "is_executable": False,
+            "reason": f"스마트폰 GPS 오차(±{int(gps_accuracy)}m > 20m)가 커서 정밀한 반원 궤적을 산출할 수 없습니다.",
+            "waypoints": []
+        }
+
+    # 피사체와 시작점 간 거리(반경) 계산
+    radius = haversine_distance(float(start_lat), float(start_lon), float(subject_lat), float(subject_lon))
+    if radius < 2.0 or radius > 50.0:
+        return {
+            "technique": "ORBIT",
+            "name": "반원 회전 촬영 (Orbit Arc)",
+            "is_executable": False,
+            "reason": f"피사체와의 거리({radius:.1f}m)가 반원 보행 권장 범위(2~50m)를 벗어났습니다.",
+            "waypoints": []
+        }
+
+    count = max(3, min(10, int(count)))
+    arc_deg = max(45.0, min(180.0, float(arc_angle_deg)))
+    is_cw = str(orbit_direction).lower() in ["clockwise", "시계", "cw"]
+    dir_name = "clockwise" if is_cw else "counter_clockwise"
+
+    # 피사체 중심 국지 평면 좌표계 (원점: subject_lat, subject_lon)
+    x0, y0 = lat_lon_to_meters(float(start_lat), float(start_lon), float(subject_lat), float(subject_lon))
+    theta0 = math.atan2(y0, x0)
+    delta_theta = math.radians(arc_deg)
+
+    wps = []
+    for i in range(count):
+        s = i / max(1, count - 1)
+        theta_i = theta0 - (delta_theta * s) if is_cw else theta0 + (delta_theta * s)
+        xi = radius * math.cos(theta_i)
+        yi = radius * math.sin(theta_i)
+        w_lat, w_lon = meters_to_lat_lon(xi, yi, float(subject_lat), float(subject_lon))
+
+        # 웨이포인트에서 피사체 중심(0, 0)을 향하는 방위각 (dx: -xi, dy: -yi)
+        t_heading = (math.degrees(math.atan2(-xi, -yi)) + 360.0) % 360.0
+
+        wps.append({
+            "seq": i + 1,
+            "lat": round(w_lat, 7),
+            "lng": round(w_lon, 7),
+            "target_heading": round(t_heading, 1),
+            "target_pitch": -12.0,
+            "angle_step_deg": round(s * arc_deg, 1),
+            "action": "ORBIT_ARC_WALK",
+            "guide_msg": f"반원 선회 {i+1}단계: 피사체를 바라보며 반원 방향으로 이동하세요 ({int(s * arc_deg)}°)"
+        })
+
+    return {
+        "technique": "ORBIT",
+        "name": "반원 회전 촬영 (Orbit Arc)",
+        "is_executable": True,
+        "radius_m": round(radius, 1),
+        "arc_angle_deg": round(arc_deg, 1),
+        "orbit_direction": dir_name,
+        "requires_walking": True,
+        "waypoints": wps,
+        "safety_notice": "⚠️ [보행 안전 주의] 피사체를 주시하며 걷는 동안 발밑과 측면 장애물에 걸리지 않도록 주변 환경을 육안으로 확인하세요."
+    }
+
+
+def generate_panorama_guide(
+    current_lat: Optional[float] = None,
+    current_lon: Optional[float] = None,
+    current_heading: float = 0.0,
+    sweep_angle_deg: float = 120.0,
+    rotation_direction: str = "right",
+    steps: int = 4
+) -> Dict[str, Any]:
+    """
+    [기법 5] PANORAMA (고정 파노라마 촬영)
+    보행 waypoint를 일절 생성하지 않고(0개), 스마트폰 방향 센서 기준으로 회전 각도를 안내
+    """
+    steps = max(2, min(8, int(steps)))
+    sweep_deg = max(30.0, min(360.0, float(sweep_angle_deg)))
+    is_right = str(rotation_direction).lower() in ["right", "우측", "오른쪽"]
+    dir_name = "right" if is_right else "left"
+    dir_kor = "오른쪽" if is_right else "왼쪽"
+
+    start_h = float(current_heading) % 360.0
+
+    checkpoints = []
+    for k in range(steps):
+        s = k / max(1, steps - 1)
+        delta = sweep_deg * s
+        t_heading = (start_h + (delta if is_right else -delta) + 360.0) % 360.0
+        checkpoints.append({
+            "step": k + 1,
+            "target_heading": round(t_heading, 1),
+            "angle_delta_deg": round(delta, 1),
+            "guide_msg": f"파노라마 {k+1}단계: 현재 위치를 유지하고 천천히 {dir_kor}으로 회전하세요 (목표 각도 {int(t_heading)}°)"
+        })
+
+    return {
+        "technique": "PANORAMA",
+        "name": "고정 파노라마 촬영 (Stationary Panorama)",
+        "is_executable": True,
+        "requires_walking": False,
+        "is_stationary": True,
+        "rotation_direction": dir_name,
+        "sweep_angle_deg": round(sweep_deg, 1),
+        "waypoints": [],  # [엄격 준수] 보행 waypoint 0개
+        "rotation_checkpoints": checkpoints,
+        "guide_message": f"현재 위치를 유지하고 천천히 {dir_kor}으로 회전하세요.",
+        "safety_notice": "📱 [고정 파노라마 안내] 본 기법은 보행 이동 없이 제자리에서 기기를 수평으로 잡고 회전하는 촬영입니다."
+    }
+
+
+# ===========================================================================
+# 3. 촬영 기법별 기본 권장 보행 경로 템플릿 생성 (하위 호환 100% 보존)
 # ===========================================================================
 def generate_default_recommended_waypoints(
     ref_lat: float = 37.5284,
@@ -185,6 +612,82 @@ class ShootingPathService:
     meters_to_lat_lon = staticmethod(meters_to_lat_lon)
     point_to_segment_distance = staticmethod(point_to_segment_distance)
     generate_default_recommended_waypoints = staticmethod(generate_default_recommended_waypoints)
+    validate_gps_coordinate = staticmethod(validate_gps_coordinate)
+    generate_forward_path = staticmethod(generate_forward_path)
+    generate_lateral_path = staticmethod(generate_lateral_path)
+    generate_diagonal_reveal_path = staticmethod(generate_diagonal_reveal_path)
+    generate_orbit_path = staticmethod(generate_orbit_path)
+    generate_panorama_guide = staticmethod(generate_panorama_guide)
+
+    def generate_technique_path(
+        self,
+        technique_id: str,
+        start_lat: float,
+        start_lon: float,
+        heading_deg: float = 0.0,
+        subject_lat: Optional[float] = None,
+        subject_lon: Optional[float] = None,
+        gps_accuracy: Optional[float] = None,
+        **kwargs: Any
+    ) -> Dict[str, Any]:
+        """신규 5대 기법 ID에 따른 독립 경로 생성기 분기"""
+        tid = str(technique_id).upper().strip()
+        if tid == "FORWARD":
+            return generate_forward_path(
+                start_lat=start_lat, start_lon=start_lon,
+                heading_deg=heading_deg,
+                distance_m=kwargs.get("distance_m", 10.0),
+                count=kwargs.get("count", 5),
+                subject_lat=subject_lat, subject_lon=subject_lon,
+                gps_accuracy=gps_accuracy
+            )
+        elif tid == "LATERAL":
+            return generate_lateral_path(
+                start_lat=start_lat, start_lon=start_lon,
+                heading_deg=heading_deg,
+                lateral_dir=kwargs.get("lateral_dir", "right"),
+                distance_m=kwargs.get("distance_m", 10.0),
+                count=kwargs.get("count", 5),
+                subject_lat=subject_lat, subject_lon=subject_lon,
+                gps_accuracy=gps_accuracy
+            )
+        elif tid == "DIAGONAL_REVEAL":
+            return generate_diagonal_reveal_path(
+                start_lat=start_lat, start_lon=start_lon,
+                heading_deg=heading_deg,
+                diagonal_side=kwargs.get("diagonal_side", "left"),
+                forward_dist_m=kwargs.get("forward_dist_m", 8.0),
+                lateral_dist_m=kwargs.get("lateral_dist_m", 6.0),
+                count=kwargs.get("count", 5),
+                gps_accuracy=gps_accuracy
+            )
+        elif tid == "ORBIT":
+            return generate_orbit_path(
+                start_lat=start_lat, start_lon=start_lon,
+                subject_lat=subject_lat, subject_lon=subject_lon,
+                orbit_direction=kwargs.get("orbit_direction", "clockwise"),
+                arc_angle_deg=kwargs.get("arc_angle_deg", 180.0),
+                count=kwargs.get("count", 5),
+                space_confirmed=kwargs.get("space_confirmed", True),
+                gps_accuracy=gps_accuracy
+            )
+        elif tid == "PANORAMA":
+            return generate_panorama_guide(
+                current_lat=start_lat, current_lon=start_lon,
+                current_heading=heading_deg,
+                sweep_angle_deg=kwargs.get("sweep_angle_deg", 120.0),
+                rotation_direction=kwargs.get("rotation_direction", "right"),
+                steps=kwargs.get("steps", 4)
+            )
+        else:
+            return generate_forward_path(
+                start_lat=start_lat, start_lon=start_lon,
+                heading_deg=heading_deg,
+                distance_m=kwargs.get("distance_m", 10.0),
+                count=kwargs.get("count", 5),
+                subject_lat=subject_lat, subject_lon=subject_lon,
+                gps_accuracy=gps_accuracy
+            )
 
     def analyze_and_correct_path(
         self,

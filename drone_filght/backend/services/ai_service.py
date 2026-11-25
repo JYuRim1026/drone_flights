@@ -550,30 +550,45 @@ class AIService:
             subject_center_x = round(float(np.argmax(col_energy) / max(1, w - 1)), 2)
             subject_center_y = round(float(np.argmax(row_energy) / max(1, h - 1)), 2)
 
-            # 바운딩 박스 추정 (상위 25% 에지 집중 영역)
-            threshold = np.percentile(energy, 75)
-            y_pts, x_pts = np.where(energy >= threshold)
-            if len(x_pts) >= 20:
-                x_min = round(float(np.min(x_pts) / max(1, w)), 2)
-                x_max = round(float(np.max(x_pts) / max(1, w)), 2)
-                y_min = round(float(np.min(y_pts) / max(1, h)), 2)
-                y_max = round(float(np.max(y_pts) / max(1, h)), 2)
+            # [Phase 12 Step 3] 에지 공간 분산 및 집중도 분석 (의미론적 객체 검출 오판 방지)
+            total_energy = float(np.sum(energy))
+            if total_energy > 1e-4:
+                eh, ew = energy.shape
+                ys, xs = np.indices((eh, ew))
+                mean_x = float(np.sum(xs * energy) / total_energy)
+                mean_y = float(np.sum(ys * energy) / total_energy)
+                var_x = float(np.sum(((xs - mean_x) ** 2) * energy) / total_energy)
+                var_y = float(np.sum(((ys - mean_y) ** 2) * energy) / total_energy)
+                std_x_norm = math.sqrt(max(0.0, var_x)) / max(1, ew)
+                std_y_norm = math.sqrt(max(0.0, var_y)) / max(1, eh)
             else:
-                x_min = max(0.0, round(subject_center_x - 0.15, 2))
-                x_max = min(1.0, round(subject_center_x + 0.15, 2))
-                y_min = max(0.0, round(subject_center_y - 0.15, 2))
-                y_max = min(1.0, round(subject_center_y + 0.15, 2))
+                std_x_norm = 0.28
+                std_y_norm = 0.28
 
-            box_w = max(0.05, x_max - x_min)
-            box_h = max(0.05, y_max - y_min)
-            occupancy_ratio = round(float(box_w * box_h), 2)
+            # 에지가 화면 전체에 고르게 퍼진 경우(배경 질감, 노이즈 등) vs 국소 집중 영역 구분
+            is_diffuse = (std_x_norm > 0.22 and std_y_norm > 0.22)
 
-            if occupancy_ratio > 0.40:
-                size_status = "TOO_LARGE"
-            elif occupancy_ratio < 0.04:
-                size_status = "TOO_SMALL"
+            if is_diffuse:
+                # 에지가 산발적으로 분산되어 특정 피사체 경계를 단정할 수 없음 -> UNKNOWN 처리
+                x_min = max(0.0, round(subject_center_x - 0.20, 2))
+                x_max = min(1.0, round(subject_center_x + 0.20, 2))
+                y_min = max(0.0, round(subject_center_y - 0.20, 2))
+                y_max = min(1.0, round(subject_center_y + 0.20, 2))
+                occupancy_ratio = 0.16
+                size_status = "UNKNOWN"
             else:
-                size_status = "APPROPRIATE"
+                # 중심 집중 에지 클러스터 추정
+                half_w = min(0.35, max(0.08, std_x_norm * 1.5))
+                half_h = min(0.35, max(0.08, std_y_norm * 1.5))
+                x_min = max(0.0, round(subject_center_x - half_w, 2))
+                x_max = min(1.0, round(subject_center_x + half_w, 2))
+                y_min = max(0.0, round(subject_center_y - half_h, 2))
+                y_max = min(1.0, round(subject_center_y + half_h, 2))
+                box_w = max(0.05, x_max - x_min)
+                box_h = max(0.05, y_max - y_min)
+                occupancy_ratio = round(float(box_w * box_h), 2)
+                # CV 규칙 엔진은 의미 인식이 제한되므로 신뢰성 없는 TOO_LARGE 강제를 배제하고 UNKNOWN 또는 APPROPRIATE 처리
+                size_status = "UNKNOWN" if occupancy_ratio > 0.35 else "APPROPRIATE"
 
             sky_ratio = round(float(horizon_y), 2)
 
@@ -602,7 +617,7 @@ class AIService:
                 "subject_center_x": 0.55,
                 "subject_center_y": 0.50,
                 "occupancy_ratio": 0.16,
-                "size_status": "APPROPRIATE",
+                "size_status": "UNKNOWN",
                 "bounding_box": {"x_min": 0.40, "y_min": 0.35, "x_max": 0.70, "y_max": 0.65},
                 "sky_ratio": 0.42
             }
@@ -638,6 +653,58 @@ class AIService:
         cardinal = cardinals[idx]
 
         return distance, bearing, cardinal
+
+    @classmethod
+    def calculate_along_and_cross_track(
+        cls,
+        curr_lat: float,
+        curr_lon: float,
+        target_lat: float,
+        target_lon: float,
+        prev_lat: Optional[float] = None,
+        prev_lon: Optional[float] = None
+    ) -> Tuple[float, float, float]:
+        """
+        [Phase 10 & Phase 12 Step 3] 추천 경로 세그먼트 기준 정밀 거리/편차 산출:
+        1) Haversine 직접 거리 (m): 현재 위치에서 목표 지점까지의 직선 구면 거리
+        2) Along-track 잔여 거리 (m): 경로 진행축 상에서 목표 지점까지 남은 거리 (>0: 목표점 이전 정상 전진 중, <=0: 목표점 통과)
+        3) Cross-track 횡편차 (m): 경로 세그먼트 선형 기준 좌우 직교 편차 (+: 경로 우측 편차, -: 경로 좌측 편차)
+        """
+        d_m, b_deg, _ = cls.calculate_gps_distance_and_bearing(curr_lat, curr_lon, target_lat, target_lon)
+
+        # 기준 시작점이 없거나 시작점과 목표점이 동일한 경우 직선 거리 및 직진 상태 반환
+        if prev_lat is None or prev_lon is None or (abs(prev_lat - target_lat) < 1e-7 and abs(prev_lon - target_lon) < 1e-7):
+            return round(d_m, 2), round(d_m, 2), 0.0
+
+        R = 6371000.0
+        mid_lat = math.radians((prev_lat + target_lat) / 2.0)
+
+        # 세그먼트 벡터 S (시작점 -> 목표점)
+        s_x = math.radians(target_lon - prev_lon) * R * math.cos(mid_lat)
+        s_y = math.radians(target_lat - prev_lat) * R
+        seg_len = math.hypot(s_x, s_y)
+
+        if seg_len < 0.1:
+            return round(d_m, 2), round(d_m, 2), 0.0
+
+        # 단위 진행축 벡터 u 및 단위 횡축 벡터 n (우측 90도 직교)
+        u_x = s_x / seg_len
+        u_y = s_y / seg_len
+        n_x = u_y
+        n_y = -u_x
+
+        # 시작점 기준 현재 위치 벡터 P
+        p_x = math.radians(curr_lon - prev_lon) * R * math.cos(mid_lat)
+        p_y = math.radians(curr_lat - prev_lat) * R
+
+        # 진행축 투영 거리 및 잔여 거리
+        along_dist = p_x * u_x + p_y * u_y
+        remaining_along = seg_len - along_dist
+
+        # 횡편차 (우측: 양수, 좌측: 음수)
+        cross_dist = p_x * n_x + p_y * n_y
+
+        return round(d_m, 2), round(remaining_along, 2), round(cross_dist, 2)
 
     @classmethod
     def _check_gps_freshness(cls, current_timestamp: Any, max_age_seconds: float = 15.0) -> Tuple[bool, float]:
@@ -792,16 +859,28 @@ class AIService:
         # =====================================================================
         # Step 2. 보행 이동 안내 (Walking Movement Guide) 순수 기하 수식 계산 및 안전 검증
         # =====================================================================
-        target_seq = current_waypoint_seq or 1
-        target_wp = None
-        if rec_waypoints:
-            matched = [w for w in rec_waypoints if w.get("seq") == target_seq]
-            if matched:
-                target_wp = matched[0]
-            else:
-                idx = min(max(0, target_seq - 1), len(rec_waypoints) - 1)
-                target_wp = rec_waypoints[idx]
-                target_seq = target_wp.get("seq", target_seq)
+        # 촬영 기법 식별 (5대 기법 기준: FORWARD, LATERAL, DIAGONAL_REVEAL, ORBIT, PANORAMA)
+        from backend.services.technique_service import technique_service
+        raw_tech = str(user_pref_data.get("top_technique") or purpose or "FORWARD").strip()
+        effective_base_tech = technique_service.map_to_base_5(raw_tech)
+        if any(k in raw_tech.lower() for k in ["panorama", "파노라마"]):
+            effective_base_tech = "PANORAMA"
+        elif any(k in raw_tech.lower() for k in ["lateral", "측면"]):
+            effective_base_tech = "LATERAL"
+        elif any(k in raw_tech.lower() for k in ["diagonal", "사선", "reveal", "리빌"]):
+            effective_base_tech = "DIAGONAL_REVEAL"
+        elif any(k in raw_tech.lower() for k in ["orbit", "오빗"]):
+            effective_base_tech = "ORBIT"
+        elif any(k in raw_tech.lower() for k in ["forward", "전진", "dronie"]):
+            effective_base_tech = "FORWARD"
+
+        if isinstance(path_data, dict):
+            if path_data.get("technique"):
+                effective_base_tech = str(path_data["technique"]).upper()
+            if path_data.get("is_stationary") is True:
+                effective_base_tech = "PANORAMA"
+
+        is_panorama = (effective_base_tech == "PANORAMA")
 
         # GPS 정확도 및 최신성 검증 (Phase 6 정확도 필터 기준 및 15초 제한)
         is_gps_accuracy_valid = True
@@ -820,72 +899,178 @@ class AIService:
 
         is_gps_usable = (is_gps_accuracy_valid and is_gps_fresh)
 
-        walking_guide: Dict[str, Any] = {
-            "target_waypoint_seq": target_seq,
-            "total_waypoints": len(rec_waypoints),
-            "distance_m": None,
-            "bearing_deg": None,
-            "bearing_cardinal": None,
-            "is_waypoint_reached": False,
-            "is_near_waypoint": False,
-            "consecutive_arrival_count": 0,
-            "current_accuracy": current_accuracy,
-            "is_gps_usable": is_gps_usable,
-            "walking_message": "스마트폰 GPS 신호 수신 대기 중 (보행 동선 준비)",
-            "safety_notice": "⚠️ [보행 안전 주의] 이동 시 화면만 보지 마시고 전방 지형 및 주변 환경을 육안으로 확인하세요. (경로 안전성은 자동 검증되지 않음)",
-            "target_lat": target_wp.get("lat") if target_wp else None,
-            "target_lng": target_wp.get("lng") if target_wp else None
-        }
-
-        if current_lat is not None and current_lng is not None and target_wp and target_wp.get("lat") and target_wp.get("lng"):
-            if not is_gps_accuracy_valid:
-                # GPS 정확도가 20m를 초과하면 거리 및 방위각 계산 중단, 안내 메시지 출력
-                walking_guide.update({
-                    "walking_message": gps_accuracy_error,
-                    "distance_m": None,
-                    "bearing_deg": None,
-                    "bearing_cardinal": None,
-                    "is_waypoint_reached": False,
-                    "is_near_waypoint": False,
-                    "consecutive_arrival_count": 0
-                })
-            elif not is_gps_fresh:
-                # GPS 좌표가 15초 이상 지연된 경우 이동 안내 중단, 안내 메시지 출력
-                walking_guide.update({
-                    "walking_message": gps_freshness_error,
-                    "distance_m": None,
-                    "bearing_deg": None,
-                    "bearing_cardinal": None,
-                    "is_waypoint_reached": False,
-                    "is_near_waypoint": False,
-                    "consecutive_arrival_count": 0
-                })
-            else:
-                # GPS 정상: 거리·방위각 계산 및 2.5m 이내 2회 이상 연속 관측 시에만 도착 확정 (Debounce)
-                d_m, b_deg, b_card = cls.calculate_gps_distance_and_bearing(
-                    float(current_lat), float(current_lng),
-                    float(target_wp["lat"]), float(target_wp["lng"])
-                )
-                is_near = (d_m <= 2.5)
-                new_consecutive = (consecutive_arrival_count or 0) + 1 if is_near else 0
-                is_reached = bool(is_near and new_consecutive >= 2)
-
-                if is_reached:
-                    w_msg = f"목표 {target_seq}번 지점 반경({d_m:.1f}m) 내 도착 완료! 다음 지점으로 이동하거나 안정된 자세로 촬영하세요."
-                elif is_near:
-                    w_msg = f"목표 {target_seq}번 지점 반경({d_m:.1f}m) 접근 중... (도착 확인 관측 1/2회)"
+        # PANORAMA 전용 분기 (보행 웨이포인트 0개, 제자리 회전 안내만 제공)
+        if is_panorama:
+            walking_guide: Dict[str, Any] = {
+                "target_waypoint_seq": 0,
+                "total_waypoints": 0,
+                "distance_m": 0.0,
+                "along_track_m": 0.0,
+                "cross_track_m": 0.0,
+                "lateral_status": "ON_TRACK",
+                "technique": "PANORAMA",
+                "is_stationary": True,
+                "bearing_deg": None,
+                "bearing_cardinal": None,
+                "is_waypoint_reached": True,
+                "is_near_waypoint": True,
+                "consecutive_arrival_count": 2,
+                "current_accuracy": current_accuracy,
+                "is_gps_usable": is_gps_usable,
+                "walking_message": "제자리 파노라마/360° 회전 촬영 모드입니다. 보행 이동 없이 제자리에서 천천히 회전하세요.",
+                "safety_notice": "⚠️ [회전 안전 주의] 제자리 회전 시 발밑 지형과 주변 장애물을 육안으로 확인하세요.",
+                "target_lat": None,
+                "target_lng": None
+            }
+        else:
+            target_seq = current_waypoint_seq or 1
+            target_wp = None
+            prev_wp = None
+            if rec_waypoints:
+                matched = [w for w in rec_waypoints if w.get("seq") == target_seq]
+                if matched:
+                    target_wp = matched[0]
                 else:
-                    w_msg = f"다음 {target_seq}번 웨이포인트를 향해 {b_card}({int(b_deg)}°) 방향으로 약 {d_m:.1f}m 보행 이동하세요."
+                    idx = min(max(0, target_seq - 1), len(rec_waypoints) - 1)
+                    target_wp = rec_waypoints[idx]
+                    target_seq = target_wp.get("seq", target_seq)
 
-                walking_guide.update({
-                    "distance_m": d_m,
-                    "bearing_deg": b_deg,
-                    "bearing_cardinal": b_card,
-                    "is_near_waypoint": is_near,
-                    "consecutive_arrival_count": new_consecutive,
-                    "is_waypoint_reached": is_reached,
-                    "walking_message": w_msg
-                })
+                # 직전 웨이포인트 추적 (진행축 편차 및 횡편차 분리 계산용)
+                if target_seq > 1:
+                    prev_matched = [w for w in rec_waypoints if w.get("seq") == (target_seq - 1)]
+                    if prev_matched:
+                        prev_wp = prev_matched[0]
+
+            # 안전 고지 문구 설정 (DIAGONAL_REVEAL은 장애물 회피 미보장 명시)
+            if effective_base_tech == "DIAGONAL_REVEAL":
+                safety_notice = "⚠️ [보행 안전 주의] 본 경로는 사선 리빌 촬영 연출을 위한 이동 패턴이며, 장애물 회피나 안전 통과를 보장하지 않습니다. 반드시 육안으로 전방 및 주변 안전을 확인하세요."
+            else:
+                safety_notice = "⚠️ [보행 안전 주의] 이동 시 화면만 보지 마시고 전방 지형 및 주변 환경을 육안으로 확인하세요. (경로 안전성은 자동 검증되지 않음)"
+
+            # ORBIT 피사체 GPS 누락 및 미확인 처리
+            orbit_unexecutable = (effective_base_tech == "ORBIT" and (not rec_waypoints or (isinstance(path_data, dict) and path_data.get("is_executable") is False)))
+            if not is_gps_accuracy_valid:
+                default_walking_msg = gps_accuracy_error
+            elif not is_gps_fresh:
+                default_walking_msg = gps_freshness_error
+            elif orbit_unexecutable:
+                default_walking_msg = "피사체 실측 GPS 및 회전 공간이 미확인되어 ORBIT 보행 경로가 생성되지 않았습니다."
+            else:
+                default_walking_msg = "스마트폰 GPS 신호 수신 대기 중 (보행 동선 준비)"
+
+            walking_guide: Dict[str, Any] = {
+                "target_waypoint_seq": target_seq,
+                "total_waypoints": len(rec_waypoints),
+                "distance_m": None,
+                "along_track_m": None,
+                "cross_track_m": None,
+                "lateral_status": "ON_TRACK",
+                "technique": effective_base_tech,
+                "is_stationary": False,
+                "bearing_deg": None,
+                "bearing_cardinal": None,
+                "is_waypoint_reached": False,
+                "is_near_waypoint": False,
+                "consecutive_arrival_count": 0,
+                "current_accuracy": current_accuracy,
+                "is_gps_usable": is_gps_usable and not orbit_unexecutable,
+                "walking_message": default_walking_msg,
+                "safety_notice": safety_notice,
+                "target_lat": target_wp.get("lat") if target_wp else None,
+                "target_lng": target_wp.get("lng") if target_wp else None
+            }
+
+            if current_lat is not None and current_lng is not None and target_wp and target_wp.get("lat") and target_wp.get("lng") and not orbit_unexecutable:
+                if not is_gps_accuracy_valid:
+                    # GPS 정확도가 20m를 초과하면 거리 및 방위각 계산 중단, 대기 메시지 출력 (오안내 방지)
+                    walking_guide.update({
+                        "walking_message": gps_accuracy_error,
+                        "distance_m": None,
+                        "along_track_m": None,
+                        "cross_track_m": None,
+                        "bearing_deg": None,
+                        "bearing_cardinal": None,
+                        "is_waypoint_reached": False,
+                        "is_near_waypoint": False,
+                        "consecutive_arrival_count": 0
+                    })
+                elif not is_gps_fresh:
+                    # GPS 좌표가 15초 이상 지연된 경우 이동 안내 중단, 갱신 대기
+                    walking_guide.update({
+                        "walking_message": gps_freshness_error,
+                        "distance_m": None,
+                        "along_track_m": None,
+                        "cross_track_m": None,
+                        "bearing_deg": None,
+                        "bearing_cardinal": None,
+                        "is_waypoint_reached": False,
+                        "is_near_waypoint": False,
+                        "consecutive_arrival_count": 0
+                    })
+                else:
+                    # GPS 정상: 진행축 편차(Along-track)와 횡편차(Cross-track) 독립 산출
+                    prev_lat_val = float(prev_wp["lat"]) if (prev_wp and prev_wp.get("lat")) else None
+                    prev_lon_val = float(prev_wp["lng"]) if (prev_wp and prev_wp.get("lng")) else None
+
+                    d_m, along_rem_m, cross_m = cls.calculate_along_and_cross_track(
+                        curr_lat=float(current_lat),
+                        curr_lon=float(current_lng),
+                        target_lat=float(target_wp["lat"]),
+                        target_lon=float(target_wp["lng"]),
+                        prev_lat=prev_lat_val,
+                        prev_lon=prev_lon_val
+                    )
+                    _, b_deg, b_card = cls.calculate_gps_distance_and_bearing(
+                        float(current_lat), float(current_lng),
+                        float(target_wp["lat"]), float(target_wp["lng"])
+                    )
+
+                    # 횡편차 판정 (3.0m 데드밴드 적용하여 잦은 방향 흔들림 방지)
+                    if cross_m > 3.0:
+                        lateral_status = "DEVIATED_RIGHT"
+                    elif cross_m < -3.0:
+                        lateral_status = "DEVIATED_LEFT"
+                    else:
+                        lateral_status = "ON_TRACK"
+
+                    # 2.5m 이내 2회 연속 관측 시에만 도착 확정 (Debounce)
+                    is_near = (d_m <= 2.5)
+                    new_consecutive = (consecutive_arrival_count or 0) + 1 if is_near else 0
+                    is_reached = bool(is_near and new_consecutive >= 2)
+
+                    if is_reached:
+                        w_msg = f"목표 {target_seq}번 지점 반경({d_m:.1f}m) 내 도착 완료! 다음 지점으로 이동하거나 안정된 자세로 촬영하세요."
+                    elif is_near:
+                        w_msg = f"목표 {target_seq}번 지점 반경({d_m:.1f}m) 접근 중... (도착 확인 관측 {new_consecutive}/2회)"
+                    elif lateral_status == "DEVIATED_RIGHT":
+                        w_msg = f"경로 우측으로 약 {abs(cross_m):.1f}m 벗어났습니다. 좌측으로 이동하여 추천 경로로 복귀하세요."
+                    elif lateral_status == "DEVIATED_LEFT":
+                        w_msg = f"경로 좌측으로 약 {abs(cross_m):.1f}m 벗어났습니다. 우측으로 이동하여 추천 경로로 복귀하세요."
+                    else:
+                        # 정상 진행축 이동 중 (목표점 이전 위치는 정상 전진 상태이며 후진을 절대 안내하지 않음)
+                        if effective_base_tech == "FORWARD":
+                            w_msg = f"피사체를 바라보며 다음 {target_seq}번 지점을 향해 {b_card}({int(b_deg)}°) 방향으로 약 {d_m:.1f}m 천천히 전진 이동하세요."
+                        elif effective_base_tech == "LATERAL":
+                            w_msg = f"피사체를 화면에 유지하며 다음 {target_seq}번 지점을 향해 {b_card}({int(b_deg)}°) 방향으로 약 {d_m:.1f}m 측면 이동하세요."
+                        elif effective_base_tech == "DIAGONAL_REVEAL":
+                            w_msg = f"다음 {target_seq}번 지점을 향해 {b_card}({int(b_deg)}°) 방향으로 약 {d_m:.1f}m 대각선 사선 이동하세요. (전방 장애물 주의)"
+                        elif effective_base_tech == "ORBIT":
+                            w_msg = f"피사체를 중심에 두고 다음 {target_seq}번 선회 지점을 향해 {b_card}({int(b_deg)}°) 방향으로 약 {d_m:.1f}m 이동하세요."
+                        else:
+                            w_msg = f"다음 {target_seq}번 웨이포인트를 향해 {b_card}({int(b_deg)}°) 방향으로 약 {d_m:.1f}m 보행 이동하세요."
+
+                    walking_guide.update({
+                        "distance_m": d_m,
+                        "along_track_m": along_rem_m,
+                        "cross_track_m": cross_m,
+                        "lateral_status": lateral_status,
+                        "bearing_deg": b_deg,
+                        "bearing_cardinal": b_card,
+                        "is_near_waypoint": is_near,
+                        "consecutive_arrival_count": new_consecutive,
+                        "is_waypoint_reached": is_reached,
+                        "walking_message": w_msg
+                    })
 
         # =====================================================================
         # Step 3. 카메라 프레임 분석 (Gemini Vision 시도 -> CV Fallback)
@@ -965,7 +1150,7 @@ class AIService:
                 "subject_center_x": 0.5,
                 "subject_center_y": 0.5,
                 "occupancy_ratio": 0.16,
-                "size_status": "APPROPRIATE",
+                "size_status": "UNKNOWN",
                 "bounding_box": {"x_min": 0.35, "y_min": 0.35, "x_max": 0.65, "y_max": 0.65},
                 "lighting_type": "주간 맑은 조도",
                 "sky_ratio": 0.42,
@@ -1042,7 +1227,7 @@ class AIService:
             subject_cx = cls._safe_float(cv_data.get("subject_center_x"), 0.5)
             subject_cy = cls._safe_float(cv_data.get("subject_center_y"), 0.5)
             occupancy = cls._safe_float(cv_data.get("occupancy_ratio"), 0.16)
-            size_status = str(cv_data.get("size_status", "APPROPRIATE"))
+            size_status = str(cv_data.get("size_status", "UNKNOWN"))
             bounding_box = cv_data.get("bounding_box")
             lighting = str(cv_data.get("lighting_type", "주간 맑은 조도"))
             sky_ratio = cls._safe_float(cv_data.get("sky_ratio"), 0.42)
@@ -1116,31 +1301,8 @@ class AIService:
             guide_direction = "level_right" if effective_roll > 0 else "level_left"
             guide_message = f"스마트폰이 {'우측' if effective_roll > 0 else '좌측'}으로 기울어졌습니다 ({tilt_val}°). 기기를 반듯하게 수평으로 맞춰주세요."
             frame_score = max(50, 85 - int(tilt_val * 3))
-        elif size_status == "TOO_LARGE":
-            is_aligned = False
-            guide_direction = "step_back"
-            guide_message = f"피사체 점유율({int(occupancy*100)}%)이 너무 큽니다. 뒤로 한두 걸음 물러나 적절한 여백을 확보하세요."
-            frame_score = 68
-        elif size_status == "TOO_SMALL":
-            is_aligned = False
-            guide_direction = "step_forward"
-            guide_message = f"피사체 점유율({int(occupancy*100)}%)이 너무 작습니다. 조금 더 가까이 접근해 피사체를 강조하세요."
-            frame_score = 72
-        elif dist <= 0.18:
-            if is_semantic_recognized or image_base64 is None:
-                # 피사체 인식이 확인되었거나 시뮬레이션 환경인 경우 정상 락온 및 촬영 준비 완료
-                is_aligned = True
-                guide_direction = "none"
-                guide_message = f"✓ [{rec_name}] 일치! 피사체가 최적의 촬영 프레임 내에 안정적으로 락온되었습니다."
-                frame_score = min(98, max(90, int(100 - dist * 40)))
-            else:
-                # 실측 카메라 영상에서 피사체 인식이 불확실한 경우(CV 추정값만 존재):
-                # 구도 안내는 제공하되 초록색 프레임 활성화는 제한
-                is_aligned = False
-                guide_direction = "none"
-                guide_message = f"[{rec_name}] 에지 중심 정렬 중 (피사체 식별 대기: 목표 피사체가 잘 보이도록 프레임 안에 비춰주세요)."
-                frame_score = min(78, max(65, int(85 - dist * 30)))
-        else:
+        elif dist > 0.18:
+            # 1순위: 화면 내 피사체 조준 및 팬/틸트 정렬 (이동 중 단순 후진 오안내 원천 배제)
             is_aligned = False
             frame_score = max(55, int(90 - dist * 70))
             if abs(offset_x) >= abs(offset_y):
@@ -1157,6 +1319,32 @@ class AIService:
                 else:
                     guide_direction = "up"
                     guide_message = "카메라가 낮거나 피사체가 상단에 있습니다. 카메라를 ⬆️ 위쪽으로 올리세요."
+        else:
+            # 2순위: dist <= 0.18 (화면 정렬 일치 상태)
+            # 피사체 점유율/거리 조정은 의미론적 객체 인식이 확정(Gemini Vision)되고 실제 점유율이 과도할 때만 조건부 조언
+            if is_semantic_recognized and size_status == "TOO_LARGE" and occupancy >= 0.55:
+                is_aligned = False
+                guide_direction = "step_back"
+                guide_message = f"피사체 점유율({int(occupancy*100)}%)이 큽니다. 뒤로 물러나거나 화각을 넓혀 적절한 여백을 확보하세요."
+                frame_score = 68
+            elif is_semantic_recognized and size_status == "TOO_SMALL" and occupancy <= 0.05:
+                is_aligned = False
+                guide_direction = "step_forward"
+                guide_message = f"피사체 점유율({int(occupancy*100)}%)이 작습니다. 조금 더 가까이 접근해 피사체를 강조하세요."
+                frame_score = 72
+            elif is_semantic_recognized or image_base64 is None:
+                # 피사체 인식이 확인되었거나 시뮬레이션 환경인 경우 정상 락온 및 촬영 준비 완료
+                is_aligned = True
+                guide_direction = "none"
+                guide_message = f"✓ [{rec_name}] 일치! 피사체가 최적의 촬영 프레임 내에 안정적으로 락온되었습니다."
+                frame_score = min(98, max(90, int(100 - dist * 40)))
+            else:
+                # 실측 카메라 영상에서 피사체 인식이 불확실한 경우(CV 추정값만 존재):
+                # 에지 중심 정렬은 유지하되 강제 후진 없이 피사체 비춤 대기 안내
+                is_aligned = False
+                guide_direction = "none"
+                guide_message = f"[{rec_name}] 에지 중심 정렬 중 (피사체 식별 대기: 목표 피사체가 잘 보이도록 프레임 안에 비춰주세요)."
+                frame_score = min(78, max(65, int(85 - dist * 30)))
 
         # 초록색 프레임 조건:
         # 1. 카메라 구도 및 수평도 일치 (is_aligned and is_level)

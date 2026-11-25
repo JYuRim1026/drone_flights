@@ -210,6 +210,333 @@ DEFAULT_TECHNIQUES: List[TechniqueDefinition] = [
     )
 ]
 
+# ===========================================================================
+# 신규 기본 촬영 기법 5종 상수 및 매핑 명세 (Phase 12 핵심 엔진)
+# ===========================================================================
+BASE_TECH_FORWARD = "FORWARD"
+BASE_TECH_LATERAL = "LATERAL"
+BASE_TECH_DIAGONAL_REVEAL = "DIAGONAL_REVEAL"
+BASE_TECH_ORBIT = "ORBIT"
+BASE_TECH_PANORAMA = "PANORAMA"
+
+BASE_TECHNIQUES_5 = [
+    BASE_TECH_FORWARD,
+    BASE_TECH_LATERAL,
+    BASE_TECH_DIAGONAL_REVEAL,
+    BASE_TECH_ORBIT,
+    BASE_TECH_PANORAMA
+]
+
+BASE_TECHNIQUE_METADATA: Dict[str, Dict[str, Any]] = {
+    BASE_TECH_FORWARD: {
+        "technique_id": BASE_TECH_FORWARD,
+        "name": "전진 촬영",
+        "category": "직선 접근",
+        "description": "피사체 방향으로 시선을 고정하고 천천히 직선으로 접근하여 웅장함과 원근감을 부여하는 기법입니다.",
+        "recommended_scenes": ["건축물", "조형물", "단일 피사체", "기념비", "입구", "탑", "조각상"],
+        "recommended_composition": "중앙 배치 구도 (Center Framing)",
+        "guide_message": "피사체를 바라보며 천천히 앞으로 이동하세요.",
+        "requires_walking": True,
+        "requires_subject_gps": False
+    },
+    BASE_TECH_LATERAL: {
+        "technique_id": BASE_TECH_LATERAL,
+        "name": "측면 이동 촬영",
+        "category": "측면 횡이동",
+        "description": "피사체를 화면의 특정 분할선에 유지하면서 좌우로 평행 이동하여 입체적인 시선 흐름과 패럴랙스를 연출합니다.",
+        "recommended_scenes": ["긴 건축물", "다리", "해안선", "성벽", "가로수길", "수평선", "거리"],
+        "recommended_composition": "3x3 삼분할 황금비율 구도 (Rule of Thirds)",
+        "guide_message": "피사체를 화면에 유지하면서 오른쪽으로 이동하세요.",
+        "requires_walking": True,
+        "requires_subject_gps": False
+    },
+    BASE_TECH_DIAGONAL_REVEAL: {
+        "technique_id": BASE_TECH_DIAGONAL_REVEAL,
+        "name": "사선 리빌 촬영",
+        "category": "사선 전환",
+        "description": "전경 요소를 벗어나며 가려져 있던 후경을 드라마틱하게 드러내는 전진과 측면 결합 대각선 이동 기법입니다.",
+        "recommended_scenes": ["나무 사이 풍경", "건물 사이 공간", "전망대", "골목 어귀", "전경 모퉁이"],
+        "recommended_composition": "전경 리빌 구도 (Foreground Reveal)",
+        "guide_message": "전경을 벗어나도록 왼쪽 앞 방향으로 이동하세요.",
+        "requires_walking": True,
+        "requires_subject_gps": False
+    },
+    BASE_TECH_ORBIT: {
+        "technique_id": BASE_TECH_ORBIT,
+        "name": "반원 회전 촬영",
+        "category": "반원 선회",
+        "description": "피사체의 실측 GPS를 중심으로 일정한 반경의 반원을 그리며 선회 이동하여 3차원 입체감을 극대화합니다.",
+        "recommended_scenes": ["독립된 조형물", "건축물", "넓은 광장", "중앙 분수", "단독 기념비"],
+        "recommended_composition": "원형 선회 구도 (Orbit Arc)",
+        "guide_message": "피사체를 바라보며 반원 방향으로 이동하세요.",
+        "requires_walking": True,
+        "requires_subject_gps": True
+    },
+    BASE_TECH_PANORAMA: {
+        "technique_id": BASE_TECH_PANORAMA,
+        "name": "고정 파노라마 촬영",
+        "category": "제자리 회전",
+        "description": "보행 이동 없이 현재 위치에 서서 스마트폰 방향 센서의 유도에 따라 수평선을 유지하며 천천히 패닝 회전합니다.",
+        "recommended_scenes": ["산", "바다", "도시 전경", "넓은 풍경", "스카이라인", "수평선"],
+        "recommended_composition": "수평선 파노라마 구도 (Horizon Panorama)",
+        "guide_message": "현재 위치를 유지하고 천천히 오른쪽으로 회전하세요.",
+        "requires_walking": False,
+        "requires_subject_gps": False
+    }
+}
+
+LEGACY_TO_BASE_5_MAP: Dict[str, str] = {
+    "orbit_poi": BASE_TECH_ORBIT,
+    "orbit": BASE_TECH_ORBIT,
+    "straight_dronie": BASE_TECH_FORWARD,
+    "dronie": BASE_TECH_FORWARD,
+    "low_angle_ground": BASE_TECH_FORWARD,
+    "low_angle": BASE_TECH_FORWARD,
+    "active_track_thirds": BASE_TECH_LATERAL,
+    "thirds": BASE_TECH_LATERAL,
+    "reveal_obstacle": BASE_TECH_DIAGONAL_REVEAL,
+    "reveal": BASE_TECH_DIAGONAL_REVEAL,
+    "negative_space_landscape": BASE_TECH_PANORAMA,
+    "landscape": BASE_TECH_PANORAMA,
+    "symmetry_reflection": BASE_TECH_PANORAMA,
+    "symmetry": BASE_TECH_PANORAMA,
+    "top_down_overhead": BASE_TECH_FORWARD,
+    "high_spiral": BASE_TECH_ORBIT,
+    "high_speed_flyby": BASE_TECH_FORWARD
+}
+
+BASE_5_TO_LEGACY_MAP: Dict[str, str] = {
+    BASE_TECH_FORWARD: "straight_dronie",
+    BASE_TECH_LATERAL: "active_track_thirds",
+    BASE_TECH_DIAGONAL_REVEAL: "reveal_obstacle",
+    BASE_TECH_ORBIT: "orbit_poi",
+    BASE_TECH_PANORAMA: "negative_space_landscape"
+}
+
+
+def recommend_technique(
+    scene_analysis: Optional[Dict[str, Any]] = None,
+    sensor_state: Optional[Dict[str, Any]] = None,
+    route_constraints: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """
+    [Phase 12] 5가지 기본 촬영 기법 적합도 점수 산출 및 추천 엔진
+    
+    입력:
+    - scene_analysis: 장면 유형, 피사체, 3단계 공간 레이어, 개활지, 장애물, 가시성 등
+    - sensor_state: 스마트폰 센서 (GPS 가용성, 정확도, 방위각, 자이로 등)
+    - route_constraints: 보행 경로 제약 (피사체 실측 GPS 여부, 이동 공간 여유 등)
+
+    동작 규칙:
+    1. 각 기법별 적합도 점수(0~100) 독립 계산
+    2. 실행 불가능한 기법은 추천 점수가 높아도 후보에서 제외 (is_executable=False)
+       - ORBIT: 피사체 GPS 실측 좌표가 없으면 반드시 비활성화
+       - PANORAMA: 보행 이동 불필요, 방향 센서 기반 회전 유효성 평가
+    3. 점수 최상위 기법을 기본 추천하되, 동점/저신뢰도 시 사용자 직접 선택 유도
+    """
+    sa = scene_analysis or {}
+    ss = sensor_state or {}
+    rc = route_constraints or {}
+
+    scene_type = str(sa.get("scene_type") or "").lower()
+    main_subject = str(sa.get("main_subject") or sa.get("subject") or "").lower()
+    foreground = str(sa.get("foreground") or "").lower()
+    midground = str(sa.get("midground") or "").lower()
+    background = str(sa.get("background") or "").lower()
+    open_space = str(sa.get("open_space") or "").lower()
+    obstacle_level = str(sa.get("obstacle_level") or "NONE").upper()
+    subject_visibility = str(sa.get("subject_visibility") or "CLEAR").upper()
+
+    has_gps = bool(ss.get("has_gps", True))
+    gps_accuracy = ss.get("gps_accuracy")
+    gps_is_accurate = (gps_accuracy is None or float(gps_accuracy) <= 20.0)
+
+    has_subject_gps = bool(rc.get("has_subject_gps", False))
+    subject_lat = rc.get("subject_lat")
+    subject_lng = rc.get("subject_lng")
+    has_valid_subject_coords = (has_subject_gps and subject_lat is not None and subject_lng is not None)
+
+    scores: Dict[str, float] = {}
+    reasons: Dict[str, str] = {}
+    feasibility: Dict[str, Dict[str, Any]] = {}
+
+    combined_text = f"{scene_type} {main_subject} {foreground} {midground} {background} {open_space}"
+
+    # -------------------------------------------------------------------------
+    # 1. FORWARD (전진 촬영) 스코어링
+    # -------------------------------------------------------------------------
+    f_score = 50.0
+    f_matched = []
+    if any(k in combined_text for k in ["건축물", "조형물", "단일 피사체", "기념비", "동상", "입구", "탑", "건물", "문", "성벽"]):
+        f_score += 26.0
+        f_matched.append("단일 피사체/건축물 정면 구도")
+    if obstacle_level in ["NONE", "LOW"] or any(k in open_space for k in ["전방", "직선", "접근", "여유", "보행로"]):
+        f_score += 16.0
+        f_matched.append("전방 직선 보행 여유 확보")
+    if obstacle_level == "HIGH" or "전방 막힘" in open_space:
+        f_score -= 22.0
+    scores[BASE_TECH_FORWARD] = round(max(10.0, min(98.0, f_score)), 1)
+    reasons[BASE_TECH_FORWARD] = " · ".join(f_matched) if f_matched else "피사체 중심 직선 접근 촬영에 적합"
+    feasibility[BASE_TECH_FORWARD] = {
+        "is_executable": True,
+        "reason": "전방 직선 접근 이동 가능"
+    }
+
+    # -------------------------------------------------------------------------
+    # 2. LATERAL (측면 이동 촬영) 스코어링
+    # -------------------------------------------------------------------------
+    l_score = 50.0
+    l_matched = []
+    if any(k in combined_text for k in ["긴 건축물", "다리", "해안선", "성벽", "가로수", "거리", "도로", "선형", "수평"]):
+        l_score += 28.0
+        l_matched.append("선형 피사체/측면 패럴랙스 효과")
+    if any(k in open_space for k in ["측면", "좌우", "평행", "횡", "트랙"]):
+        l_score += 14.0
+        l_matched.append("좌우 평행 보행 공간 확보")
+    scores[BASE_TECH_LATERAL] = round(max(10.0, min(98.0, l_score)), 1)
+    reasons[BASE_TECH_LATERAL] = " · ".join(l_matched) if l_matched else "피사체 유지 측면 횡이동에 적합"
+    feasibility[BASE_TECH_LATERAL] = {
+        "is_executable": True,
+        "reason": "측면 평행 이동 가능"
+    }
+
+    # -------------------------------------------------------------------------
+    # 3. DIAGONAL_REVEAL (사선 리빌 촬영) 스코어링
+    # -------------------------------------------------------------------------
+    dr_score = 42.0
+    dr_matched = []
+    has_foreground_element = any(k in foreground for k in ["나무", "기둥", "벽", "장애물", "모퉁이", "전경", "숲"])
+    if has_foreground_element:
+        dr_score += 32.0
+        dr_matched.append("전경 차폐물에서 후경으로의 시각적 전환")
+    if obstacle_level in ["MEDIUM", "HIGH"] or subject_visibility == "PARTIALLY_OCCLUDED":
+        dr_score += 18.0
+        dr_matched.append("전경 장애물 회피 대각선 패턴")
+    if not has_foreground_element and obstacle_level == "NONE":
+        dr_score -= 25.0
+    scores[BASE_TECH_DIAGONAL_REVEAL] = round(max(10.0, min(98.0, dr_score)), 1)
+    reasons[BASE_TECH_DIAGONAL_REVEAL] = " · ".join(dr_matched) if dr_matched else "전경 요소를 벗어나며 배경을 드러내는 사선 촬영 패턴"
+    feasibility[BASE_TECH_DIAGONAL_REVEAL] = {
+        "is_executable": True,
+        "reason": "대각선 촬영 패턴 생성 가능 (실제 장애물 회피는 사용자가 육안으로 안전 확인 필요)"
+    }
+
+    # -------------------------------------------------------------------------
+    # 4. ORBIT (반원 회전 촬영) 스코어링 & 실행 제약 검증
+    # -------------------------------------------------------------------------
+    o_score = 48.0
+    o_matched = []
+    if any(k in combined_text for k in ["독립", "조형물", "중앙", "분수", "광장", "기념비", "원형", "동상"]):
+        o_score += 26.0
+        o_matched.append("중앙 독립 피사체 3차원 입체감 강조")
+    if any(k in open_space for k in ["반경", "원형", "광장", "사방", "둘레"]):
+        o_score += 15.0
+        o_matched.append("피사체 주변 반원 선회 공간 양호")
+
+    # [핵심 제약] 피사체 실측 GPS 및 정확도 미충족 시 실행 불가 처리
+    if not has_valid_subject_coords:
+        is_orbit_exec = False
+        orbit_reason = "피사체의 실제 GPS 좌표가 확보되지 않아 반원 경로 생성이 비활성화되었습니다."
+        o_score = max(10.0, o_score - 30.0)
+    elif not has_gps or not gps_is_accurate:
+        is_orbit_exec = False
+        orbit_reason = "GPS 수신 상태 저하(오차 20m 초과 또는 신호 부재)로 인해 반원 궤적 실행이 비활성화되었습니다."
+        o_score = max(10.0, o_score - 20.0)
+    else:
+        is_orbit_exec = True
+        orbit_reason = "피사체 실측 GPS 및 이동 반경 공간 확인됨"
+
+    scores[BASE_TECH_ORBIT] = round(max(10.0, min(98.0, o_score)), 1)
+    reasons[BASE_TECH_ORBIT] = " · ".join(o_matched) if o_matched else "피사체 중심 반원 선회 연출"
+    feasibility[BASE_TECH_ORBIT] = {
+        "is_executable": is_orbit_exec,
+        "reason": orbit_reason
+    }
+
+    # -------------------------------------------------------------------------
+    # 5. PANORAMA (고정 파노라마 촬영) 스코어링
+    # -------------------------------------------------------------------------
+    p_score = 45.0
+    p_matched = []
+    if any(k in combined_text for k in ["산", "바다", "도시 전경", "넓은 풍경", "스카이라인", "수평선", "호수", "전망", "광활"]):
+        p_score += 32.0
+        p_matched.append("광활한 풍경 및 스카이라인 조망")
+    if foreground in ["없음", "none", ""] or any(k in background for k in ["원경", "하늘", "구름"]):
+        p_score += 14.0
+        p_matched.append("원경 중심 수평선 구성")
+    if any(k in open_space for k in ["개활지", "전망대", "고정", "제자리"]):
+        p_score += 10.0
+        p_matched.append("제자리 회전 촬영에 최적")
+    scores[BASE_TECH_PANORAMA] = round(max(10.0, min(98.0, p_score)), 1)
+    reasons[BASE_TECH_PANORAMA] = " · ".join(p_matched) if p_matched else "보행 없는 제자리 패닝 회전 촬영에 적합"
+    feasibility[BASE_TECH_PANORAMA] = {
+        "is_executable": True,
+        "reason": "보행 waypoint 없이 스마트폰 방향 센서 기반 회전 안내 제공"
+    }
+
+    # -------------------------------------------------------------------------
+    # 후보 정렬 및 최적 기법 결정
+    # -------------------------------------------------------------------------
+    candidates = []
+    for tid in BASE_TECHNIQUES_5:
+        meta = BASE_TECHNIQUE_METADATA[tid]
+        cand = {
+            "technique_id": tid,
+            "name": meta["name"],
+            "category": meta["category"],
+            "score": scores[tid],
+            "recommendation_reason": reasons[tid],
+            "guide_message": meta["guide_message"],
+            "recommended_composition": meta["recommended_composition"],
+            "requires_walking": meta["requires_walking"],
+            "is_executable": feasibility[tid]["is_executable"],
+            "feasibility_reason": feasibility[tid]["reason"]
+        }
+        candidates.append(cand)
+
+    candidates.sort(key=lambda x: (x["is_executable"], x["score"]), reverse=True)
+
+    # 실행 가능한 후보 필터링
+    executable_cands = [c for c in candidates if c["is_executable"]]
+
+    if not executable_cands:
+        # 모든 보행 기법 불가 시 고정 파노라마로 안전 Fallback
+        recommended_tid = BASE_TECH_PANORAMA
+        status = "CONFIRMED"
+        requires_user_confirmation = False
+        prompt_msg = "보행 이동 조건이 제한되어 제자리 [고정 파노라마 촬영]이 추천되었습니다."
+    else:
+        top_cand = executable_cands[0]
+        second_cand = executable_cands[1] if len(executable_cands) > 1 else None
+
+        # 동점(점수 차 5점 미만)이거나 신뢰도 부족(최고점 58점 미만) 시 사용자 확인 요청
+        score_diff = (top_cand["score"] - second_cand["score"]) if second_cand else 100.0
+        if score_diff < 5.0 or top_cand["score"] < 58.0:
+            status = "NEEDS_USER_CHOICE"
+            requires_user_confirmation = True
+            prompt_msg = f"현장 조건에 부합하는 추천 기법([{top_cand['name']}], [{second_cand['name'] if second_cand else ''}])이 경합 중입니다. 원하시는 기법을 직접 선택해 주세요."
+            recommended_tid = top_cand["technique_id"]
+        else:
+            status = "CONFIRMED"
+            requires_user_confirmation = False
+            prompt_msg = f"장면 분석 결과 [{top_cand['name']}] 기법이 최적 기법으로 선정되었습니다."
+            recommended_tid = top_cand["technique_id"]
+
+    return {
+        "status": status,
+        "recommended_technique": recommended_tid,
+        "requires_user_confirmation": requires_user_confirmation,
+        "prompt_message": prompt_msg,
+        "scores": scores,
+        "candidates": candidates,
+        "active_constraints": {
+            "has_gps": has_gps,
+            "gps_accuracy": gps_accuracy,
+            "has_subject_gps": has_subject_gps,
+            "subject_coords": {"lat": subject_lat, "lng": subject_lng} if has_valid_subject_coords else None
+        }
+    }
+
 
 class ShootingTechniqueService:
     """촬영 기법 카탈로그 및 사용자 맞춤 추천 통합 서비스"""
@@ -218,6 +545,25 @@ class ShootingTechniqueService:
         self._catalog: Dict[str, TechniqueDefinition] = {}
         for t in DEFAULT_TECHNIQUES:
             self._catalog[t.technique_id] = t
+        
+        # 신규 5대 기본 기법 카탈로그 등록
+        for bid in BASE_TECHNIQUES_5:
+            meta = BASE_TECHNIQUE_METADATA[bid]
+            self._catalog[bid] = TechniqueDefinition(
+                technique_id=bid,
+                name=meta["name"],
+                category=meta["category"],
+                description=meta["description"],
+                recommended_scenes=meta["recommended_scenes"],
+                required_environment={"space": "지상 보행 또는 고정 회전", "lighting": "자연광"},
+                is_smartphone_supported=True,
+                is_drone_only=False,
+                related_tags=[bid.lower(), meta["name"]],
+                recommended_composition=meta["recommended_composition"],
+                precautions="보행 시 전방 및 주변 장애물을 육안으로 반드시 확인하세요.",
+                execution_guide=meta["guide_message"],
+                drone_warning=None
+            )
 
     # -----------------------------------------------------------------------
     # 1. 카탈로그 관리 (동적 등록 및 조회)
@@ -228,6 +574,28 @@ class ShootingTechniqueService:
 
     def get_technique(self, technique_id: str) -> Optional[TechniqueDefinition]:
         return self._catalog.get(technique_id)
+
+    def get_base_5_techniques(self) -> List[Dict[str, Any]]:
+        """신규 기본 촬영 기법 5종 메타데이터 목록 반환"""
+        return [BASE_TECHNIQUE_METADATA[tid] for tid in BASE_TECHNIQUES_5]
+
+    def map_to_base_5(self, tech_id: str) -> str:
+        """기존 10종 기법 ID를 신규 5대 기법 ID로 매핑 (기본값: FORWARD)"""
+        if not tech_id:
+            return BASE_TECH_FORWARD
+        tid = tech_id.strip()
+        if tid in BASE_TECHNIQUES_5:
+            return tid
+        return LEGACY_TO_BASE_5_MAP.get(tid.lower(), BASE_TECH_FORWARD)
+
+    def recommend_technique(
+        self,
+        scene_analysis: Optional[Dict[str, Any]] = None,
+        sensor_state: Optional[Dict[str, Any]] = None,
+        route_constraints: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """[Phase 12] 5개 기본 기법 추천 엔진 호출"""
+        return recommend_technique(scene_analysis, sensor_state, route_constraints)
 
     def get_all_techniques(self, filter_supported_only: bool = False) -> List[TechniqueDefinition]:
         techniques = list(self._catalog.values())
