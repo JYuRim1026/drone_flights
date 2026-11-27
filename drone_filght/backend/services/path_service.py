@@ -506,6 +506,7 @@ def generate_panorama_guide(
         "name": "고정 파노라마 촬영 (Stationary Panorama)",
         "is_executable": True,
         "requires_walking": False,
+        "requires_heading_sensor": True,
         "is_stationary": True,
         "rotation_direction": dir_name,
         "sweep_angle_deg": round(sweep_deg, 1),

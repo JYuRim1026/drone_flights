@@ -59,7 +59,28 @@ class PersonalizedPathService:
             ShootingPath.is_valid == True
         ).order_by(ShootingPath.created_at.desc()).all()
 
-        # 2. 누적 기법 선호도 점수 조회 (Phase 5)
+        # Phase A-2.3: 촬영 사례 중 Phase 9 게이트(ACCEPTABLE 이상)를 통과한 개인 실측 경로도 병합
+        from backend.models.models import ShootingCaseStudy
+        case_user_paths = (
+            db.query(ShootingPath)
+            .join(ShootingCaseStudy, ShootingCaseStudy.path_id == ShootingPath.path_id)
+            .filter(
+                ShootingCaseStudy.user_id == user_id,
+                ShootingCaseStudy.source_type == "SELF_FILMED",
+                ShootingCaseStudy.has_actual_gps == True,
+                ShootingCaseStudy.gps_quality_status.in_(["EXCELLENT", "ACCEPTABLE"]),
+                ShootingCaseStudy.is_path_usable == True,
+                ShootingPath.is_valid == True,
+                ShootingPath.tracking_source.in_(["PHONE_GPS", "DRONE_GPS"])
+            )
+            .all()
+        )
+        existing_past_ids = {p.path_id for p in past_paths}
+        for cup in case_user_paths:
+            if cup.path_id not in existing_past_ids:
+                past_paths.append(cup)
+
+        # 2. 누적 기법 선호도 점수 조회 (Phase 5 + Phase A-2.3 시각적 선호도)
         pref_scores = db.query(UserPreferenceScore).filter(
             UserPreferenceScore.user_id == user_id,
             UserPreferenceScore.category == "technique"

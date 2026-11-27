@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from backend.models.models import FlightRequest
 from backend.schemas.schemas import FlightRequestCreate, AirspaceZoneResponse
-from backend.external import external_manager
+from backend.external.unified_manager import external_manager
 
 class PcService:
     @staticmethod

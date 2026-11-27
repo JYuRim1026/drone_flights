@@ -1,13 +1,6 @@
 from typing import Dict, Any
 from backend.config import settings
 from backend.external.cache import external_cache
-try:
-    from backend.services.airspace_service import check_airspace
-except ImportError:
-    try:
-        from services.airspace_service import check_airspace
-    except ImportError:
-        from airspace_service import check_airspace
 
 class AirspaceClient:
     """
@@ -27,6 +20,7 @@ class AirspaceClient:
             return cached
 
         # 공식 공역 데이터베이스 진단
+        from backend.services.airspace_service import check_airspace
         raw_info = check_airspace(lat, lon, location_name)
         zone_name = raw_info.get("zone_name", "비관제 일반공역 (G공역)")
         approval_required = raw_info.get("approval_required", False)

@@ -471,7 +471,9 @@ def recommend_technique(
     reasons[BASE_TECH_PANORAMA] = " · ".join(p_matched) if p_matched else "보행 없는 제자리 패닝 회전 촬영에 적합"
     feasibility[BASE_TECH_PANORAMA] = {
         "is_executable": True,
-        "reason": "보행 waypoint 없이 스마트폰 방향 센서 기반 회전 안내 제공"
+        "requires_heading_sensor": True,
+        "realtime_guidance_capability": "HEADING_SENSOR_REQUIRED (센서 미지원 시 수평선 수동 회전 대체)",
+        "reason": "보행 waypoint 없이 제자리 회전 가이드 생성 가능 (실시간 각도 추적은 방향 센서 필요)"
     }
 
     # -------------------------------------------------------------------------
@@ -1083,7 +1085,9 @@ class ShootingTechniqueService:
         shooting_number: int = 1,
         was_shot: bool = True,
         satisfaction_score: int = 5,
-        comment: Optional[str] = None
+        comment: Optional[str] = None,
+        composition_type: Optional[str] = None,
+        is_liked: Optional[bool] = None
     ) -> Dict[str, Any]:
         """
         촬영 후 사용자 피드백 기록:
@@ -1163,6 +1167,8 @@ class ShootingTechniqueService:
                     "was_shot": was_shot,
                     "applied_weight": 0.0,
                     "updated_preference_score": current_score,
+                    "is_liked": is_liked,
+                    "composition_type": composition_type,
                     "message": f"동일 촬영 회차({shooting_number}회차) 피드백이 이미 등록되어 추가 가산되지 않았습니다."
                 }
 
@@ -1176,6 +1182,14 @@ class ShootingTechniqueService:
                 delta_weight=delta_weight
             )
             applied_weight = delta_weight
+            if composition_type:
+                self._update_preference_score_delta(
+                    db=db,
+                    user_id=user_id,
+                    category="composition",
+                    preference_value=composition_type,
+                    delta_weight=delta_weight
+                )
         else:
             # 최초 피드백 반영
             updated_score = self._update_preference_score(
@@ -1186,6 +1200,14 @@ class ShootingTechniqueService:
                 weight=new_pref_weight
             )
             applied_weight = new_pref_weight
+            if composition_type:
+                self._update_preference_score(
+                    db=db,
+                    user_id=user_id,
+                    category="composition",
+                    preference_value=composition_type,
+                    weight=new_pref_weight
+                )
 
         # 4. 피드백 메타데이터 저장 (feedbacks_by_key 및 feedbacks_by_round 동시 보존)
         fb_dict = {
@@ -1196,6 +1218,8 @@ class ShootingTechniqueService:
             "satisfaction_score": satisfaction_score,
             "applied_weight": new_pref_weight,
             "comment": comment,
+            "composition_type": composition_type,
+            "is_liked": is_liked,
             "recorded_at": datetime.utcnow().isoformat()
         }
 
@@ -1226,6 +1250,8 @@ class ShootingTechniqueService:
             "was_shot": was_shot,
             "applied_weight": applied_weight,
             "updated_preference_score": updated_score,
+            "is_liked": is_liked,
+            "composition_type": composition_type,
             "message": f"[{tech.name}] 만족도 피드백({satisfaction_score}점)이 반영되었습니다. 맞춤 추천 점수가 갱신되었습니다."
         }
 

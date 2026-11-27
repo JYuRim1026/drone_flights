@@ -33,11 +33,11 @@ from backend.routers import (
     external_router,
     ai_router,
     safety_router,
-    sync_router,
     auth_router,
     gateway_router,
     drones_router,
-    community_router
+    community_router,
+    case_study_router
 )
 from backend.services.auth_service import auth_service
 
@@ -233,10 +233,10 @@ _api_routers = [
     external_router,
     ai_router,
     safety_router,
-    sync_router,
     auth_router,
     drones_router,
-    community_router
+    community_router,
+    case_study_router
 ]
 for _r in _api_routers:
     app.include_router(_r, prefix="/api")       # Standard /api/auth/login
@@ -261,8 +261,7 @@ def root():
             "common_api": f"{settings.API_V1_STR}/common",
             "external_api": f"{settings.API_V1_STR}/external",
             "ai_api": f"{settings.API_V1_STR}/ai",
-            "safety_api": f"{settings.API_V1_STR}/safety",
-            "sync_api": f"{settings.API_V1_STR}/sync"
+            "safety_api": f"{settings.API_V1_STR}/safety"
         }
     }
 
@@ -297,9 +296,13 @@ def health():
     }
 
 # ==========================================
-# Frontend Static Files Mount (모바일 실기기 및 로컬 원스톱 서빙)
+# Frontend Static Files & Uploads Mount (모바일 실기기 및 로컬 원스톱 서빙)
 # ==========================================
 from fastapi.staticfiles import StaticFiles
+_uploads_dir = os.path.join(str(_CUR_DIR), "uploads")
+if os.path.exists(_uploads_dir):
+    app.mount("/uploads", StaticFiles(directory=_uploads_dir), name="uploads")
+
 _frontend_dir = os.path.join(str(_PARENT_DIR), "frontend")
 if os.path.exists(_frontend_dir):
     app.mount("/", StaticFiles(directory=_frontend_dir, html=True), name="frontend")

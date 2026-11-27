@@ -710,7 +710,9 @@ class MobileService:
             shooting_number=actual_shooting_number,
             was_shot=req.was_shot,
             satisfaction_score=req.satisfaction_score,
-            comment=req.comment
+            comment=req.comment,
+            composition_type=getattr(req, "composition_type", None),
+            is_liked=getattr(req, "is_liked", None)
         )
         return TechniqueFeedbackResponse(**res)
 

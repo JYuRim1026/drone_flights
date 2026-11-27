@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import base64
 import logging
@@ -154,6 +155,17 @@ def analyze_frame(
             # QR 토큰이 mobile_launch 임시 토큰이거나 공개 데모 프로젝트일 경우 유연 처리
             pass
 
+    # Phase A-6: 사용자 식별 및 선호도 분리 보장 (current_user -> req.user_id -> project.user_id)
+    target_user = current_user
+    if not target_user and req.user_id:
+        target_user = db.query(User).filter(User.id == req.user_id).first()
+    if not target_user and req.project_id:
+        p_obj = db.query(ShootingProject).filter(ShootingProject.id == req.project_id).first()
+        if p_obj and p_obj.user_id:
+            target_user = db.query(User).filter(User.id == p_obj.user_id).first()
+
+    eff_user_id = req.user_id or (target_user.id if target_user else None)
+
     return ai_service.analyze_scene_and_recommend(
         image_base64=req.image_base64,
         scene_intent=req.scene_intent,
@@ -169,7 +181,8 @@ def analyze_frame(
         current_waypoint_seq=req.current_waypoint_seq,
         project_id=req.project_id or 1,
         shooting_number=req.shooting_number or 1,
-        current_user=current_user,
+        current_user=target_user,
+        user_id=eff_user_id,
         save_to_db=req.save_result if req.save_result is not None else True,
         db=db
     )
@@ -907,18 +920,45 @@ def get_location_asset_detail(
 def stream_asset_file(
     project_id: int = Path(..., description="프로젝트 ID"),
     filename: str = Path(..., description="파일 식별자"),
+    current_user: Optional[User] = Depends(get_optional_current_user),
     db: Session = Depends(get_db)
 ):
     """
     백엔드에 안전하게 저장된 스마트폰 파노라마/영상 물리 파일을 브라우저로 스트리밍 반환합니다.
+    - 정규식 및 경로 정규화를 통한 Path Traversal 방어
+    - 공용 에셋(is_common=True)은 익명 허용, 개인 에셋은 소유권 검증 적용
     """
     safe_name = os.path.basename(filename)
-    if ".." in filename or safe_name != filename:
-        raise HTTPException(status_code=400, detail="유효하지 않은 파일 경로입니다.")
+    if ".." in filename or safe_name != filename or not re.match(r"^[a-zA-Z0-9_\-]+\.[a-zA-Z0-9]+$", safe_name):
+        raise HTTPException(status_code=400, detail="유효하지 않은 파일 경로 또는 파일명 형식입니다.")
 
-    file_path = os.path.join(UPLOAD_DIR, str(project_id), safe_name)
-    if not os.path.exists(file_path):
+    try:
+        p_id_int = int(project_id)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="유효하지 않은 프로젝트 식별자입니다.")
+
+    base_dir = os.path.abspath(UPLOAD_DIR)
+    target_dir = os.path.abspath(os.path.join(base_dir, str(p_id_int)))
+    file_path = os.path.abspath(os.path.join(target_dir, safe_name))
+
+    # Path traversal 검증: 대상 경로가 허용된 project 디렉터리 내부에 속해야 함
+    if not file_path.startswith(target_dir) or not file_path.startswith(base_dir):
+        raise HTTPException(status_code=403, detail="허가되지 않은 상위 디렉터리 접근 시도입니다.")
+
+    if not os.path.exists(file_path) or not os.path.isfile(file_path):
         raise HTTPException(status_code=404, detail="물리적 저장소에서 대상 파일을 찾을 수 없습니다.")
+
+    # 기본 접근 권한 검사 (데모 공용 파일 vs 개인 파일)
+    asset_record = db.query(LocationAsset).filter(
+        LocationAsset.project_id == p_id_int,
+        LocationAsset.file_url.like(f"%{safe_name}")
+    ).first()
+
+    if asset_record and not asset_record.is_common:
+        if not current_user:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="비공개 파일 접근을 위해 로그인이 필요합니다.")
+        if asset_record.user_id and current_user.id != asset_record.user_id and getattr(current_user, "role", "") != "admin":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="해당 파일에 대한 접근 권한이 없습니다.")
 
     ext = os.path.splitext(safe_name)[1].lower()
     media_types = {

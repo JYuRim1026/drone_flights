@@ -6,20 +6,6 @@ from datetime import datetime
 # ==========================================
 # E. 사용자 & 설정 스키마
 # ==========================================
-class UserBase(BaseModel):
-    username: str
-    email: Optional[str] = None
-    full_name: Optional[str] = None
-    phone: Optional[str] = None
-    drone_model: Optional[str] = "DJI Mini 4 Pro"
-    drone_weight_g: Optional[int] = 249
-
-class UserResponse(UserBase):
-    id: int
-    created_at: datetime
-    class Config:
-        from_attributes = True
-
 class UserSettingBase(BaseModel):
     safety_margin_m: Optional[int] = 30
     notification_enabled: Optional[bool] = True
@@ -187,6 +173,7 @@ class MobileProjectDetailResponse(BaseModel):
 # ==========================================
 class AnalyzeRequest(BaseModel):
     project_id: int = 1
+    user_id: Optional[int] = Field(None, description="사용자 고유 식별 ID (선호도 분리 조회용)")
     image_base64: Optional[str] = Field(None, description="모바일 카메라 캡처 이미지 (Base64 인코딩)")
     current_pitch: Optional[float] = -15.0
     current_roll: Optional[float] = 0.0
@@ -234,6 +221,14 @@ class AnalyzeResponse(BaseModel):
     walking_guide: Optional[Dict[str, Any]] = Field(None, description="보행 이동 가이드 (다음 웨이포인트 거리, 방위각, 방위명, 보행지침, 안전안내)")
     shooting_guide: Optional[Dict[str, Any]] = Field(None, description="카메라 구도 지향 가이드 (상하좌우 미세조정, 수평도, 오프셋)")
     context_info: Optional[Dict[str, Any]] = Field(None, description="반영된 4가지 통합 데이터 정보 (프로젝트, 장소에셋, 경로버전/유형, 선호기법)")
+
+    # Phase A-4: 촬영 사례 기반 실시간 구도 및 기법 추천 연계
+    reference_case_study: Optional[Dict[str, Any]] = Field(None, description="분석된 장면과 유사한 승인된 촬영 사례 (YouTube 레퍼런스 등 시각 참고용)")
+    recommended_technique: Optional[str] = Field(None, description="참고 사례 및 AI 분석 기반 추천 촬영 기법 (FORWARD, LATERAL, etc.)")
+
+    # Phase A-6: 사용자 선호도 기반 개인화 추천 정보
+    is_personalized: bool = Field(False, description="사용자 선호도(기법 및 구도) 기반 개인화 추천 반영 여부")
+    personalized_reason: Optional[str] = Field(None, description="개인화 추천 사유 또는 미적용/대체 추천 사유")
 
 class RecommendationResponse(BaseModel):
     project_id: int
@@ -572,34 +567,6 @@ class RegisteredDroneResponse(RegisteredDroneBase):
 # ==========================================
 # 스마트폰 센서 & 촬영 동선 (ShootingPath) 스키마
 # ==========================================
-class RawSensorData(BaseModel):
-    alpha: Optional[float] = Field(None, description="기기 Z축 회전각 (0~360도, 미수집시 null)")
-    beta: Optional[float] = Field(None, description="기기 X축 기울기 (-180~180도, 미수집시 null)")
-    gamma: Optional[float] = Field(None, description="기기 Y축 회전각 (-90~90도, 미수집시 null)")
-    screen_orientation_deg: Optional[int] = Field(0, description="화면 회전 각도 (0, 90, 180, 270)")
-    is_absolute: Optional[bool] = Field(False, description="지자기 기준 절대각 여부")
-
-class ConvertedCameraOrientation(BaseModel):
-    camera_heading_deg: Optional[float] = Field(None, description="화면 방향 보정된 카메라 렌즈 방위각 (0~360도, 미수집시 null)")
-    camera_pitch_deg: Optional[float] = Field(None, description="화면 방향 보정된 카메라 상하 틸트각 (-90~90도, 미수집시 null)")
-    camera_roll_deg: Optional[float] = Field(None, description="카메라 좌우 롤 각도 (미수집시 null)")
-    frame_aspect: Optional[str] = Field("PORTRAIT", description="촬영 화면 비율 (PORTRAIT/LANDSCAPE)")
-
-class PhonePositionData(BaseModel):
-    lat: float = Field(..., description="위도")
-    lng: float = Field(..., description="경도")
-    accuracy_m: Optional[float] = Field(None, description="스마트폰 GPS 오차 반경 (미터)")
-    altitude_m: Optional[float] = Field(None, description="스마트폰 보고 고도 (미수집시 null, 임의 드론 고도 생성 금지)")
-
-class PhoneWaypointItem(BaseModel):
-    seq: int = Field(..., description="시퀀스 번호")
-    timestamp: Optional[str] = Field(None, description="수집 시각 (ISO 8601)")
-    raw_gps: Optional[PhonePositionData] = Field(None, description="스마트폰 GPS 수집 원본")
-    filtered_gps: Optional[PhonePositionData] = Field(None, description="노이즈 필터링된 보행 좌표")
-    raw_sensor: Optional[RawSensorData] = Field(None, description="단말기 방향 센서 원본")
-    camera_orientation: Optional[ConvertedCameraOrientation] = Field(None, description="변환된 카메라 렌즈 방향")
-    composition_state: Optional[Dict[str, Any]] = Field(None, description="실시간 화면 구도 분석 상태")
-
 class ShootingPathCreate(BaseModel):
     project_id: int = Field(..., description="촬영 프로젝트 ID")
     shooting_number: Optional[int] = Field(None, description="동일 프로젝트 내 촬영 회차 (생략 시 자동 산출)")
@@ -712,16 +679,6 @@ class LocationAssetResponse(LocationAssetCreate):
 # ==========================================
 # 촬영 기법 카탈로그 (ShootingTechnique) 및 맞춤 추천 스키마
 # ==========================================
-class ShootingTechniqueItem(BaseModel):
-    technique_id: str
-    name_ko: str
-    category: str
-    support_phone: bool
-    support_drone: bool
-    required_sensors: List[str] = Field(default_factory=list)
-    guide_instruction: str
-
-
 class TechniqueCatalogItem(BaseModel):
     technique_id: str
     name: str
@@ -784,6 +741,8 @@ class TechniqueFeedbackRequest(BaseModel):
     was_shot: bool = Field(True, description="실제 촬영 진행 여부")
     satisfaction_score: int = Field(5, ge=1, le=5, description="만족도 점수 (1~5점)")
     comment: Optional[str] = Field(None, description="사용자 피드백 코멘트")
+    composition_type: Optional[str] = Field(None, description="피드백 대상 추천 구도 유형")
+    is_liked: Optional[bool] = Field(None, description="좋아요/아쉬워요 간편 피드백 여부 (True: 좋아요, False: 아쉬워요)")
 
 
 class TechniqueFeedbackResponse(BaseModel):
@@ -795,6 +754,8 @@ class TechniqueFeedbackResponse(BaseModel):
     applied_weight: float
     updated_preference_score: float
     message: str
+    composition_type: Optional[str] = None
+    is_liked: Optional[bool] = None
 
 
 # ==========================================
@@ -894,6 +855,129 @@ class PersonalizedPathComparisonResponse(BaseModel):
     avg_offset_from_common_m: float = 0.0
     poi_target_name: Optional[str] = None
     comparison_summary: Optional[str] = None
+
+
+# ==========================================
+# Phase A-2: 촬영 사례 데이터 스키마 (Case Study)
+# ==========================================
+class CaseStudyFrameBase(BaseModel):
+    frame_index: int
+    timestamp_sec: float
+    extracted_ratio: Optional[float] = None
+    storage_path: Optional[str] = None
+    file_size_bytes: Optional[int] = None
+    scene_type: Optional[str] = None
+    primary_subject: Optional[str] = None
+    subject_bbox: Optional[Dict[str, Any]] = None
+    depth_layers: Optional[Dict[str, Any]] = None
+    composition_type: Optional[str] = None
+    estimated_technique: Optional[str] = None
+    verified_technique: Optional[str] = None
+    confidence_score: Optional[float] = None
+    raw_ai_analysis: Optional[Dict[str, Any]] = None
+    ai_model_version: str = "gemini-3.1-flash-lite"
+    prompt_version: str = "v1.0"
+    is_verified: bool = False
+
+
+class CaseStudyFrameCreate(CaseStudyFrameBase):
+    pass
+
+
+class CaseStudyFrameResponse(CaseStudyFrameBase):
+    id: int
+    case_id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ShootingCaseStudyBase(BaseModel):
+    title: str
+    description: Optional[str] = None
+    source_type: str = "SELF_FILMED"  # 'SELF_FILMED', 'YOUTUBE_REF', 'COMMUNITY_FEED'
+    video_ref_url: Optional[str] = None
+    duration_sec: Optional[float] = None
+    place_name: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    user_id: Optional[int] = None
+    project_id: Optional[int] = None
+    path_id: Optional[int] = None
+    declared_technique: Optional[str] = None
+    verified_technique: Optional[str] = None
+    has_actual_gps: bool = False
+    is_gps_time_synced: bool = False
+    gps_quality_status: str = "UNCHECKED"
+    is_path_usable: bool = False
+    is_public: bool = False
+    filming_started_at: Optional[datetime] = None
+
+
+class ShootingCaseStudyCreate(ShootingCaseStudyBase):
+    case_code: Optional[str] = None
+
+
+class ShootingCaseStudyVerifyRequest(BaseModel):
+    verification_status: str = "HUMAN_VERIFIED"  # 'HUMAN_VERIFIED', 'REJECTED'
+    verifier_notes: Optional[str] = None
+    verified_technique: Optional[str] = None
+    verifier_name: Optional[str] = None
+    verifier_role: Optional[str] = None
+
+
+class ShootingCaseStudyResponse(ShootingCaseStudyBase):
+    id: int
+    case_code: str
+    ai_analysis_status: str
+    verification_status: str
+    verifier_notes: Optional[str] = None
+    verification_audit: List[Dict[str, Any]] = []
+    created_at: datetime
+    updated_at: datetime
+    frames: List[CaseStudyFrameResponse] = []
+
+    class Config:
+        from_attributes = True
+
+
+# ==========================================
+# 28. Phase A-3: YouTube 촬영 사례 분석 및 사용자 검증 스키마
+# ==========================================
+class YouTubeAnalyzeRequest(BaseModel):
+    youtube_url: str
+    user_declared_technique: Optional[str] = None  # 사용자 사전 선언 기법 (선택 입력)
+    video_file_base64: Optional[str] = None
+    frame_images: Optional[List[Dict[str, Any]]] = None  # [{"data": "...", "timestamp_sec": float, "extracted_ratio": float}]
+    duration_sec: Optional[float] = None
+    user_notes: Optional[str] = None
+
+
+class FrameEditItem(BaseModel):
+    frame_index: int
+    verified_technique: Optional[str] = None
+    composition_type: Optional[str] = None
+    scene_type: Optional[str] = None
+    primary_subject: Optional[str] = None
+
+
+class YouTubeApproveRequest(BaseModel):
+    verified_technique: str  # FORWARD, LATERAL, DIAGONAL_REVEAL, ORBIT, PANORAMA, UNKNOWN
+    verifier_notes: Optional[str] = None
+    verifier_name: Optional[str] = None
+    verifier_role: Optional[str] = None
+    frame_edits: Optional[List[FrameEditItem]] = None
+
+
+class YouTubeRejectRequest(BaseModel):
+    verifier_notes: Optional[str] = None
+    verifier_name: Optional[str] = None
+    verifier_role: Optional[str] = None
+
+
+
+
 
 
 

@@ -1780,6 +1780,180 @@ button { cursor: pointer; }
           <button id="cinemaSearchBtn" style="display:none;"></button>
         </div>
 
+        <!-- ========================================================================= -->
+        <!-- Phase A-3: YouTube 기반 촬영 사례 분석 및 사용자 검증 UI -->
+        <!-- ========================================================================= -->
+        <div class="airaxis-search-card" id="youtubeCaseStudyCard" style="margin-bottom:24px; padding:22px 26px; border:2px solid #e0e7ff; background:#ffffff; border-radius:16px; box-shadow:0 4px 20px rgba(99,102,241,0.06);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid #f1f5f9; padding-bottom:12px; flex-wrap:wrap; gap:10px;">
+            <div>
+              <div style="font-size:16px; font-weight:800; color:var(--navy); display:flex; align-items:center; gap:8px;">
+                <span>🎬 YouTube 레퍼런스 촬영 사례 분석 &amp; 사용자 검증</span>
+                <span style="font-size:11px; background:#fef3c7; color:#92400e; font-weight:700; padding:3px 10px; border-radius:12px;">Ground Truth 원칙 (has_actual_gps=False)</span>
+                <span id="ytAnalysisStateBadge" style="font-size:11px; background:#e0e7ff; color:#3730a3; font-weight:700; padding:3px 10px; border-radius:12px;">분석 준비</span>
+              </div>
+              <p style="font-size:12px; color:var(--muted); margin:4px 0 0 0;">
+                YouTube 영상 URL과 분석용 자료(영상 파일 또는 추출 프레임)를 입력하면 Gemini Vision이 5대 시네마틱 기법과 구도를 분석하며, <strong>사용자가 검증·수정한 결과만 확정 DB에 저장</strong>됩니다.
+              </p>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button type="button" id="btnYtSampleFill" style="padding:7px 12px; font-size:11.5px; font-weight:700; background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; border-radius:8px; cursor:pointer;">
+                💡 예시 URL 자동입력
+              </button>
+            </div>
+          </div>
+
+          <!-- URL 및 프레임 입력 영역 -->
+          <div style="display:grid; grid-template-columns: 1.3fr 1fr; gap:16px; margin-bottom:14px;">
+            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:14px;">
+              <label for="ytUrlInput" style="font-size:12.5px; font-weight:800; color:var(--navy); display:block; margin-bottom:6px;">
+                🔗 YouTube 영상 URL <span style="color:#ef4444;">*</span>
+              </label>
+              <div style="display:flex; gap:6px;">
+                <input type="text" id="ytUrlInput" placeholder="예: https://www.youtube.com/watch?v=... 또는 https://youtu.be/... 또는 Shorts" style="flex:1; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:12.5px; background:#fff;">
+              </div>
+              <div style="font-size:11px; color:#64748b; margin-top:6px;">
+                ※ 일반 영상, youtu.be 단축 URL, YouTube Shorts 주소 자동 정규화 지원
+              </div>
+            </div>
+
+            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:14px;">
+              <label style="font-size:12.5px; font-weight:800; color:var(--navy); display:block; margin-bottom:6px;">
+                🎞️ 영상 프레임 분석 자료 제공 <span style="font-size:11px; color:#64748b; font-weight:normal;">(직접 업로드 / 브라우저 자동 추출)</span>
+              </label>
+              <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                <label style="padding:8px 12px; border:1px solid #3b82f6; background:#eff6ff; color:#1d4ed8; font-size:11.5px; font-weight:700; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
+                  <span>📁 영상 파일 선택 (.mp4)</span>
+                  <input type="file" id="ytVideoFileInput" accept="video/*" style="display:none;">
+                </label>
+                <label style="padding:8px 12px; border:1px solid #94a3b8; background:#fff; color:#475569; font-size:11.5px; font-weight:700; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
+                  <span>🖼️ 프레임 이미지 3장 선택</span>
+                  <input type="file" id="ytFramesFileInput" accept="image/*" multiple style="display:none;">
+                </label>
+              </div>
+              <div id="ytFrameFileStatus" style="font-size:11px; color:#059669; margin-top:6px; font-weight:600;">
+                자료 미선택 (URL만 전송 시 저작권 정책에 따라 안내 메시지가 표출됩니다)
+              </div>
+            </div>
+          </div>
+
+          <!-- 액션 바 & 상태 배너 -->
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:14px; flex-wrap:wrap;">
+            <div id="ytStatusBanner" style="display:none; flex:1; padding:10px 14px; border-radius:8px; font-size:12px; font-weight:600;"></div>
+            <button type="button" id="btnYtAnalyze" class="airaxis-btn-primary" style="padding:10px 20px; font-weight:700; background:#4f46e5; border-color:#4338ca;">
+              🤖 Gemini Vision 3대 키프레임 분석 요청
+            </button>
+          </div>
+
+          <!-- 검증 및 수정 패널 (분석 전 hidden) -->
+          <div id="ytReviewPanel" style="display:none; border-top:2px dashed #e2e8f0; padding-top:18px; margin-top:12px;">
+            
+            <!-- 영상 메타데이터 카드 -->
+            <div id="ytMetaCard" style="display:flex; gap:16px; align-items:center; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:14px; margin-bottom:16px;">
+              <img id="ytMetaThumb" src="" alt="Thumbnail" style="width:140px; height:80px; object-fit:cover; border-radius:8px; border:1px solid #cbd5e1; background:#000;">
+              <div style="flex:1;">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+                  <span id="ytMetaTitle" style="font-size:14px; font-weight:800; color:var(--navy);">영상 제목</span>
+                  <span class="badge" style="background:#e0e7ff; color:#3730a3; font-size:10.5px; padding:2px 8px; border-radius:6px;">YOUTUBE_REF</span>
+                </div>
+                <div style="font-size:11.5px; color:#64748b; line-height:1.5;">
+                  <span>채널: <strong id="ytMetaChannel" style="color:#1e293b;">-</strong></span> | 
+                  <span>식별 ID: <code id="ytMetaVideoId" style="background:#e2e8f0; padding:1px 5px; border-radius:4px;">-</code></span> | 
+                  <span>원본 링크: <a id="ytMetaUrlLink" href="#" target="_blank" style="color:#2563eb; text-decoration:none;">열기 ↗</a></span>
+                </div>
+                <div style="font-size:11px; color:#059669; font-weight:700; margin-top:4px;">
+                  ✓ 영상 길이 기준 15%, 50%, 85% 대표 프레임 추출 완료 (Aspect Fit 640×360 JPEG)
+                </div>
+              </div>
+            </div>
+
+            <!-- 종합 요약 카드 -->
+            <div id="ytSummaryCard" style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:14px; margin-bottom:18px;">
+              <div style="font-size:13px; font-weight:800; color:#1e40af; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
+                <span>🌐 AI 영상 종합 분석 요약 (3개 주요 프레임 종합)</span>
+              </div>
+              <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:10px; font-size:12px; color:#1e3a8a; margin-bottom:8px;">
+                <div><strong>주된 장면:</strong> <span id="ytSumScene">-</span></div>
+                <div><strong>주요 피사체:</strong> <span id="ytSumSubject">-</span></div>
+                <div><strong>반복 기법:</strong> <span id="ytSumTech" style="font-weight:700; color:#4338ca;">-</span></div>
+                <div><strong>대표 구도:</strong> <span id="ytSumComp">-</span></div>
+              </div>
+              <div style="font-size:11.5px; color:#1e40af; line-height:1.5;" id="ytSumProgression"></div>
+              <div id="ytSumTags" style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;"></div>
+            </div>
+
+            <!-- 3개 프레임 상세 검토 및 인라인 수정 그리드 -->
+            <div style="font-size:13.5px; font-weight:800; color:var(--navy); margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+              <span>🔍 개별 프레임 AI 분석 결과 검토 및 수정</span>
+              <span style="font-size:11px; color:#64748b;">* 각 프레임의 구도, 장면, 피사체, 기법을 직접 수정할 수 있습니다.</span>
+            </div>
+            <div id="ytFramesGrid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:14px; margin-bottom:20px;">
+              <!-- JS dynamically generates 3 frame inspection cards here -->
+            </div>
+
+            <!-- 최종 대표 기법 확정 및 승인 액션 영역 -->
+            <div style="background:#f8fafc; border:2px solid #cbd5e1; border-radius:14px; padding:18px 20px;">
+              <div style="font-size:14px; font-weight:800; color:var(--navy); margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+                <span>✍️ 최종 인간 검증 확정 및 DB 적재</span>
+                <span style="font-size:11px; color:#dc2626; font-weight:700;">* 사용자 승인 시에만 HUMAN_VERIFIED로 저장됩니다</span>
+              </div>
+              
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:14px;">
+                <div>
+                  <label for="ytVerifiedTechniqueSelect" style="font-size:12.5px; font-weight:700; color:var(--navy); display:block; margin-bottom:6px;">
+                    🎯 대표 촬영 기법 확정 (verified_technique)
+                  </label>
+                  <select id="ytVerifiedTechniqueSelect" style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; font-weight:700; color:#1e293b; background:#fff;">
+                    <option value="FORWARD">FORWARD (전진 추적)</option>
+                    <option value="LATERAL">LATERAL (측면 평행 이동)</option>
+                    <option value="DIAGONAL_REVEAL">DIAGONAL_REVEAL (사선 상승 피사체 드러내기)</option>
+                    <option value="ORBIT">ORBIT (피사체 중심 회전 선회)</option>
+                    <option value="PANORAMA">PANORAMA (파노라마 회전)</option>
+                    <option value="UNKNOWN">UNKNOWN (특정 기법으로 분류 불가)</option>
+                  </select>
+                  <div style="font-size:11px; color:#64748b; margin-top:4px;">
+                    ※ 사용자가 확정한 대표 기법이 <code>verified_technique</code>에 저장되며, 초기 추정값(<code>declared_technique</code>)은 보존됩니다.
+                  </div>
+                </div>
+
+                <div>
+                  <label for="ytVerifierNotesInput" style="font-size:12.5px; font-weight:700; color:var(--navy); display:block; margin-bottom:6px;">
+                    📝 검증자 메모 및 연출 평가
+                  </label>
+                  <input type="text" id="ytVerifierNotesInput" placeholder="예: 측면에서 수변 피사체로 전진하는 샷으로 판정, 구도 안정성 우수" style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:12.5px; background:#fff; box-sizing:border-box;">
+                  <div style="font-size:11px; color:#64748b; margin-top:4px;">
+                    ※ 검증 이력(<code>verification_audit</code>)에 타임스탬프와 함께 누적 저장됩니다.
+                  </div>
+                </div>
+              </div>
+
+              <div style="display:flex; justify-content:flex-end; gap:10px; align-items:center;">
+                <button type="button" id="btnYtReset" style="padding:9px 16px; border:1px solid #cbd5e1; background:#fff; color:#475569; font-size:12.5px; font-weight:700; border-radius:8px; cursor:pointer;">
+                  🔄 초기화
+                </button>
+                <button type="button" id="btnYtReject" style="padding:9px 18px; border:1px solid #fca5a5; background:#fef2f2; color:#b91c1c; font-size:12.5px; font-weight:700; border-radius:8px; cursor:pointer;">
+                  ✕ 사례 저장 거부 (Reject)
+                </button>
+                <button type="button" id="btnYtApprove" class="airaxis-btn-primary" style="padding:10px 22px; font-size:13px; font-weight:800; background:#059669; border-color:#047857;">
+                  ✓ 분석 결과 승인 및 DB 저장
+                </button>
+              </div>
+
+            </div>
+
+            <!-- 저장 완료 상세 카드 -->
+            <div id="ytSavedResultCard" style="display:none; margin-top:16px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:12px; padding:16px;">
+              <div style="font-size:13.5px; font-weight:800; color:#166534; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
+                <span>🎉 촬영 사례 데이터베이스 영구 적재 완료!</span>
+                <span class="badge" style="background:#dcfce7; color:#15803d; font-size:11px;">HUMAN_VERIFIED</span>
+              </div>
+              <div style="font-size:12px; color:#14532d; line-height:1.6;" id="ytSavedResultDetails"></div>
+            </div>
+
+          </div>
+
+        </div>
+
+
         <!-- Dynamic Contextual Notices & Announcements Container -->
         <div id="cinemaNoticesContainer" style="margin-bottom:18px; display:none;"></div>
 
@@ -7009,12 +7183,472 @@ function handleLogout() {
   toast('로그아웃되었습니다.');
 }
 
+// ==========================================
+// Phase A-3: YouTube 기반 촬영 사례 분석 및 사용자 검증 컨트롤러
+// ==========================================
+let currentYtCaseId = null;
+let currentYtExtractedFrames = [];
+let currentYtOverallSummary = null;
+let stagedYtFramesData = [];
+
+function initYouTubeCaseStudyController() {
+  const urlInput = document.getElementById('ytUrlInput');
+  const videoFileInput = document.getElementById('ytVideoFileInput');
+  const framesFileInput = document.getElementById('ytFramesFileInput');
+  const frameStatus = document.getElementById('ytFrameFileStatus');
+  const btnAnalyze = document.getElementById('btnYtAnalyze');
+  const btnApprove = document.getElementById('btnYtApprove');
+  const btnReject = document.getElementById('btnYtReject');
+  const btnReset = document.getElementById('btnYtReset');
+  const btnSampleFill = document.getElementById('btnYtSampleFill');
+  const statusBanner = document.getElementById('ytStatusBanner');
+  const reviewPanel = document.getElementById('ytReviewPanel');
+  const stateBadge = document.getElementById('ytAnalysisStateBadge');
+
+  if (!urlInput || !btnAnalyze) return;
+
+  if (btnSampleFill) {
+    btnSampleFill.addEventListener('click', () => {
+      urlInput.value = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+      toast('예시 YouTube URL이 입력되었습니다.');
+    });
+  }
+
+  if (videoFileInput) {
+    videoFileInput.addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      frameStatus.textContent = `⏳ 영상 디코딩 중: ${file.name}... (15%, 50%, 85% 지점 추출)`;
+      frameStatus.style.color = '#2563eb';
+
+      try {
+        const frames = await extractKeyframesFromVideoFile(file);
+        stagedYtFramesData = frames;
+        frameStatus.textContent = `✓ 영상 파일에서 3개 대표 프레임 추출 완료 (${file.name})`;
+        frameStatus.style.color = '#059669';
+        toast(`대표 프레임 3장 추출 완료!`);
+      } catch (err) {
+        console.error('Frame extraction error:', err);
+        frameStatus.textContent = `⚠️ 프레임 추출 오류: ${err.message || '비디오 디코딩 실패'}`;
+        frameStatus.style.color = '#dc2626';
+      }
+    });
+  }
+
+  if (framesFileInput) {
+    framesFileInput.addEventListener('change', async (e) => {
+      const files = Array.from(e.target.files || []);
+      if (files.length === 0) return;
+      frameStatus.textContent = `⏳ 이미지 파일 읽는 중 (${files.length}장)...`;
+      stagedYtFramesData = [];
+
+      try {
+        const ratios = [0.15, 0.50, 0.85];
+        for (let i = 0; i < Math.min(files.length, 3); i++) {
+          const b64 = await readFileAsBase64(files[i]);
+          stagedYtFramesData.push({
+            data: b64,
+            timestamp_sec: (i + 1) * 15.0,
+            extracted_ratio: ratios[i]
+          });
+        }
+        frameStatus.textContent = `✓ 직접 선택한 프레임 이미지 ${stagedYtFramesData.length}장 준비 완료`;
+        frameStatus.style.color = '#059669';
+        toast(`이미지 ${stagedYtFramesData.length}장 준비 완료`);
+      } catch (err) {
+        frameStatus.textContent = `⚠️ 파일 읽기 오류: ${err.message}`;
+        frameStatus.style.color = '#dc2626';
+      }
+    });
+  }
+
+  btnAnalyze.addEventListener('click', async () => {
+    const rawUrl = (urlInput.value || '').trim();
+    if (!rawUrl) {
+      toast('YouTube 영상 URL을 입력해 주세요.');
+      urlInput.focus();
+      return;
+    }
+
+    stateBadge.textContent = 'ANALYZING (분석 중)';
+    stateBadge.style.background = '#fef3c7';
+    stateBadge.style.color = '#b45309';
+
+    statusBanner.style.display = 'block';
+    statusBanner.style.background = '#fef3c7';
+    statusBanner.style.color = '#92400e';
+    statusBanner.style.border = '1px solid #fde68a';
+    statusBanner.innerHTML = '⏳ <strong>AI 비전 분석 진행 중:</strong> Gemini Vision이 3개 대표 프레임(15%, 50%, 85%)의 구도, 피사체 및 5대 시네마틱 기법을 분석하고 있습니다...';
+    btnAnalyze.disabled = true;
+
+    try {
+      const resp = await fetch('/api/case-studies/youtube/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          youtube_url: rawUrl,
+          frame_images: stagedYtFramesData.length > 0 ? stagedYtFramesData : null,
+          duration_sec: 60.0
+        })
+      });
+
+      const data = await resp.json();
+      btnAnalyze.disabled = false;
+
+      if (!resp.ok) {
+        throw new Error(data.detail || '분석 요청에 실패했습니다.');
+      }
+
+      if (data.status === 'ANALYSIS_UNAVAILABLE') {
+        stateBadge.textContent = 'ANALYSIS_UNAVAILABLE';
+        stateBadge.style.background = '#fee2e2';
+        stateBadge.style.color = '#991b1b';
+
+        statusBanner.style.background = '#fffbeb';
+        statusBanner.style.color = '#b45309';
+        statusBanner.style.border = '1px solid #fde68a';
+        statusBanner.innerHTML = `⚠️ <strong>영상 스트림 직접 접근 불가 안내:</strong><br>${data.message}<br><small style="color:#78350f;">[📁 영상 파일 선택 (.mp4)] 또는 [🖼️ 프레임 이미지 3장 선택] 버튼을 통해 자료를 제공해 주시면 즉시 Gemini Vision 분석이 재개됩니다.</small>`;
+        reviewPanel.style.display = 'none';
+        toast('영상 자료가 필요합니다: 영상 파일 또는 프레임을 업로드해 주세요.');
+        return;
+      }
+
+      stateBadge.textContent = 'REVIEW_PENDING (검증 대기)';
+      stateBadge.style.background = '#eff6ff';
+      stateBadge.style.color = '#1d4ed8';
+
+      statusBanner.style.background = '#eff6ff';
+      statusBanner.style.color = '#1e40af';
+      statusBanner.style.border = '1px solid #bfdbfe';
+      statusBanner.innerHTML = `✓ <strong>Gemini Vision 분석 완료 (임시 초안 등록):</strong> 아래 분석 결과를 검토 및 수정한 후 <strong>[분석 결과 승인 및 DB 저장]</strong>을 클릭하여 인간 검증을 확정해 주세요.`;
+
+      currentYtCaseId = data.case_id;
+      currentYtExtractedFrames = data.extracted_frames || [];
+      currentYtOverallSummary = data.overall_summary || {};
+
+      renderYtReviewPanel(data);
+      reviewPanel.style.display = 'block';
+      toast('AI 분석 완료: 검토 및 수정 후 승인해 주세요.');
+    } catch (err) {
+      btnAnalyze.disabled = false;
+      stateBadge.textContent = 'FAILED';
+      stateBadge.style.background = '#fee2e2';
+      stateBadge.style.color = '#991b1b';
+
+      statusBanner.style.display = 'block';
+      statusBanner.style.background = '#fef2f2';
+      statusBanner.style.color = '#b91c1c';
+      statusBanner.style.border = '1px solid #fca5a5';
+      statusBanner.innerHTML = `⚠️ <strong>분석 오류:</strong> ${err.message}`;
+      toast(`오류: ${err.message}`);
+    }
+  });
+
+  btnApprove.addEventListener('click', async () => {
+    if (!currentYtCaseId) {
+      toast('승인할 분석 대상 사례가 없습니다.');
+      return;
+    }
+
+    const techSelect = document.getElementById('ytVerifiedTechniqueSelect');
+    const notesInput = document.getElementById('ytVerifierNotesInput');
+    const chosenTech = techSelect ? techSelect.value : 'FORWARD';
+    const notes = notesInput ? notesInput.value : '';
+
+    const frameEdits = [];
+    currentYtExtractedFrames.forEach(f => {
+      const fTech = document.getElementById(`ytFrameTech_${f.frame_index}`)?.value;
+      const fComp = document.getElementById(`ytFrameComp_${f.frame_index}`)?.value;
+      const fScene = document.getElementById(`ytFrameScene_${f.frame_index}`)?.value;
+      const fSubj = document.getElementById(`ytFrameSubject_${f.frame_index}`)?.value;
+
+      frameEdits.push({
+        frame_index: f.frame_index,
+        verified_technique: fTech || chosenTech,
+        composition_type: fComp || f.composition_type,
+        scene_type: fScene || f.scene_type,
+        primary_subject: fSubj || f.primary_subject
+      });
+    });
+
+    btnApprove.disabled = true;
+    try {
+      const resp = await fetch(`/api/case-studies/youtube/${currentYtCaseId}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          verified_technique: chosenTech,
+          verifier_notes: notes,
+          frame_edits: frameEdits
+        })
+      });
+
+      const resData = await resp.json();
+      btnApprove.disabled = false;
+
+      if (!resp.ok) {
+        throw new Error(resData.detail || '승인 처리에 실패했습니다.');
+      }
+
+      stateBadge.textContent = 'HUMAN_VERIFIED (검증 완료)';
+      stateBadge.style.background = '#dcfce7';
+      stateBadge.style.color = '#15803d';
+
+      statusBanner.style.background = '#f0fdf4';
+      statusBanner.style.color = '#166534';
+      statusBanner.style.border = '1px solid #bbf7d0';
+      statusBanner.innerHTML = `🎉 <strong>인간 검증 승인 완료:</strong> 촬영 사례(ID: ${resData.id}, 코드: <code>${resData.case_code}</code>)가 DB에 영구 적재되었습니다.`;
+
+      const savedCard = document.getElementById('ytSavedResultCard');
+      const savedDetails = document.getElementById('ytSavedResultDetails');
+      if (savedCard && savedDetails) {
+        savedDetails.innerHTML = `
+          <div><strong>사례 코드:</strong> <code>${resData.case_code}</code> | <strong>ID:</strong> ${resData.id}</div>
+          <div><strong>최종 검증 기법 (verified_technique):</strong> <span style="font-weight:700; color:#059669;">${resData.verified_technique}</span> (초기 추정: ${resData.declared_technique})</div>
+          <div><strong>Ground Truth 상태:</strong> <code>has_actual_gps = false</code>, <code>path_id = null</code>, <code>is_path_usable = false</code> (Phase 8 물리 경로 오염 원천 차단 확인)</div>
+          <div><strong>검증 이력 (verification_audit):</strong> ${resData.verification_audit?.length || 0}건 누적 저장됨</div>
+          <div style="margin-top:6px; color:#15803d; font-weight:700;">✓ 향후 실시간 AI 구도 추천(search_compositions) 시각적 레퍼런스로 활용 가능</div>
+        `;
+        savedCard.style.display = 'block';
+      }
+
+      toast('🎉 촬영 사례 DB 영구 저장 완료 (HUMAN_VERIFIED)');
+    } catch (err) {
+      btnApprove.disabled = false;
+      toast(`승인 실패: ${err.message}`);
+    }
+  });
+
+  btnReject.addEventListener('click', async () => {
+    if (!currentYtCaseId) {
+      toast('거부할 분석 대상 사례가 없습니다.');
+      return;
+    }
+    if (!confirm('정말로 이 분석 결과의 저장을 거부하시겠습니까? (사례가 REJECTED 처리됩니다)')) return;
+
+    btnReject.disabled = true;
+    try {
+      const resp = await fetch(`/api/case-studies/youtube/${currentYtCaseId}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          verifier_notes: '사용자가 분석 결과 품질 불일치로 저장을 거부함'
+        })
+      });
+
+      const resData = await resp.json();
+      btnReject.disabled = false;
+
+      stateBadge.textContent = 'REJECTED (저장 거부)';
+      stateBadge.style.background = '#fee2e2';
+      stateBadge.style.color = '#991b1b';
+
+      statusBanner.style.background = '#fef2f2';
+      statusBanner.style.color = '#991b1b';
+      statusBanner.style.border = '1px solid #fca5a5';
+      statusBanner.innerHTML = `✕ <strong>사례 저장 거부 완료:</strong> 해당 임시 사례(ID: ${resData.id})는 확정 사례로 등록되지 않고 거부(REJECTED)되었습니다.`;
+
+      document.getElementById('ytSavedResultCard').style.display = 'none';
+      toast('사례 저장이 거부되었습니다.');
+    } catch (err) {
+      btnReject.disabled = false;
+      toast(`거부 처리 실패: ${err.message}`);
+    }
+  });
+
+  btnReset.addEventListener('click', () => {
+    urlInput.value = '';
+    stagedYtFramesData = [];
+    currentYtCaseId = null;
+    currentYtExtractedFrames = [];
+    currentYtOverallSummary = null;
+    frameStatus.textContent = '자료 미선택 (URL만 전송 시 저작권 정책에 따라 안내 메시지가 표출됩니다)';
+    frameStatus.style.color = '#059669';
+    stateBadge.textContent = '분석 준비';
+    stateBadge.style.background = '#e0e7ff';
+    stateBadge.style.color = '#3730a3';
+    statusBanner.style.display = 'none';
+    reviewPanel.style.display = 'none';
+    document.getElementById('ytSavedResultCard').style.display = 'none';
+    toast('초기화되었습니다.');
+  });
+}
+
+function renderYtReviewPanel(data) {
+  const meta = data.video_metadata || {};
+  const frames = data.extracted_frames || [];
+  const summary = data.overall_summary || {};
+
+  document.getElementById('ytMetaThumb').src = meta.thumbnail_url || 'https://via.placeholder.com/320x180?text=No+Thumb';
+  document.getElementById('ytMetaTitle').textContent = meta.title || 'YouTube 영상';
+  document.getElementById('ytMetaChannel').textContent = meta.channel_name || '-';
+  document.getElementById('ytMetaVideoId').textContent = meta.video_id || '-';
+  const urlLink = document.getElementById('ytMetaUrlLink');
+  if (urlLink) urlLink.href = meta.original_url || '#';
+
+  document.getElementById('ytSumScene').textContent = summary.dominant_scene_type || '-';
+  document.getElementById('ytSumSubject').textContent = summary.primary_subject || '-';
+  document.getElementById('ytSumTech').textContent = summary.repeated_technique || 'FORWARD';
+  document.getElementById('ytSumComp').textContent = summary.representative_composition || '-';
+  document.getElementById('ytSumProgression').textContent = `구도 변화 추이: ${summary.composition_progression || '15% -> 50% -> 85%'}`;
+
+  const tagsContainer = document.getElementById('ytSumTags');
+  if (tagsContainer) {
+    tagsContainer.innerHTML = '';
+    (summary.recommendation_tags || []).forEach(t => {
+      const tagSpan = document.createElement('span');
+      tagSpan.className = 'chip';
+      tagSpan.style.cssText = 'padding:4px 9px; font-size:11px; background:#dbeafe; color:#1e40af; border-radius:12px; font-weight:700;';
+      tagSpan.textContent = `#${t}`;
+      tagsContainer.appendChild(tagSpan);
+    });
+  }
+
+  const verifiedSelect = document.getElementById('ytVerifiedTechniqueSelect');
+  if (verifiedSelect && summary.repeated_technique) {
+    verifiedSelect.value = summary.repeated_technique;
+  }
+
+  const framesGrid = document.getElementById('ytFramesGrid');
+  if (!framesGrid) return;
+  framesGrid.innerHTML = '';
+
+  frames.forEach((f, idx) => {
+    const card = document.createElement('div');
+    card.style.cssText = 'background:#ffffff; border:1px solid #cbd5e1; border-radius:12px; padding:12px; box-shadow:0 2px 8px rgba(0,0,0,0.04); display:flex; flex-direction:column; gap:8px;';
+
+    const imgSrc = f.clean_b64 ? `data:image/jpeg;base64,${f.clean_b64}` : (f.storage_path ? `/${f.storage_path}` : 'https://via.placeholder.com/320x180?text=Frame');
+    const confPercent = Math.round((f.confidence_score || 0.8) * 100);
+
+    card.innerHTML = `
+      <div style="position:relative; width:100%; aspect-ratio:16/9; background:#0f172a; border-radius:8px; overflow:hidden; border:1px solid #e2e8f0;">
+        <img src="${imgSrc}" alt="Frame ${idx+1}" style="width:100%; height:100%; object-fit:contain;">
+        <span style="position:absolute; top:6px; left:6px; background:rgba(0,0,0,0.7); color:#fff; font-size:10.5px; font-weight:700; padding:2px 7px; border-radius:4px;">
+          #${idx+1} (${Math.round((f.extracted_ratio || 0.15)*100)}%, t=${f.timestamp_sec}s)
+        </span>
+        <span style="position:absolute; top:6px; right:6px; background:#10b981; color:#fff; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px;">
+          AI 신뢰도 ${confPercent}%
+        </span>
+      </div>
+
+      <div style="font-size:11.5px; color:#475569; line-height:1.4;">
+        <div style="margin-bottom:2px;"><strong style="color:var(--navy);">🎯 AI 추정 기법:</strong> <span style="font-weight:800; color:#4338ca;">${f.estimated_technique || 'FORWARD'}</span></div>
+        <div style="margin-bottom:2px;"><strong style="color:var(--navy);">💡 판단 근거:</strong> ${f.analysis_reason || '피사체와 공간 원근감에 기반한 기법'}</div>
+        <div style="margin-bottom:2px;"><strong style="color:var(--navy);">📹 카메라 모션:</strong> ${f.camera_movement || '전방 이동'}</div>
+      </div>
+
+      <div style="border-top:1px solid #f1f5f9; padding-top:8px; margin-top:2px;">
+        <div style="font-size:11px; font-weight:700; color:#334155; margin-bottom:4px;">✏️ 사용자 검증 및 수정:</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+          <div>
+            <label style="font-size:10px; color:#64748b; display:block;">촬영 기법</label>
+            <select id="ytFrameTech_${f.frame_index}" style="width:100%; font-size:11px; padding:4px 6px; border:1px solid #cbd5e1; border-radius:6px; font-weight:700;">
+              <option value="FORWARD" ${f.estimated_technique === 'FORWARD' ? 'selected' : ''}>FORWARD</option>
+              <option value="LATERAL" ${f.estimated_technique === 'LATERAL' ? 'selected' : ''}>LATERAL</option>
+              <option value="DIAGONAL_REVEAL" ${f.estimated_technique === 'DIAGONAL_REVEAL' ? 'selected' : ''}>DIAGONAL_REVEAL</option>
+              <option value="ORBIT" ${f.estimated_technique === 'ORBIT' ? 'selected' : ''}>ORBIT</option>
+              <option value="PANORAMA" ${f.estimated_technique === 'PANORAMA' ? 'selected' : ''}>PANORAMA</option>
+              <option value="UNKNOWN" ${f.estimated_technique === 'UNKNOWN' ? 'selected' : ''}>UNKNOWN</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:10px; color:#64748b; display:block;">구도 유형</label>
+            <input type="text" id="ytFrameComp_${f.frame_index}" value="${f.composition_type || '삼분할 구도'}" style="width:100%; font-size:11px; padding:4px 6px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-size:10px; color:#64748b; display:block;">장면 유형</label>
+            <input type="text" id="ytFrameScene_${f.frame_index}" value="${f.scene_type || '자연·풍경'}" style="width:100%; font-size:11px; padding:4px 6px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-size:10px; color:#64748b; display:block;">주요 피사체</label>
+            <input type="text" id="ytFrameSubject_${f.frame_index}" value="${f.primary_subject || '중앙 랜드마크'}" style="width:100%; font-size:11px; padding:4px 6px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;">
+          </div>
+        </div>
+      </div>
+    `;
+
+    framesGrid.appendChild(card);
+  });
+}
+
+async function extractKeyframesFromVideoFile(file) {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.muted = true;
+    video.playsInline = true;
+
+    const blobUrl = URL.createObjectURL(file);
+    video.src = blobUrl;
+
+    video.onloadedmetadata = async () => {
+      const duration = video.duration || 10.0;
+      const ratios = [0.15, 0.50, 0.85];
+      const results = [];
+
+      try {
+        for (let i = 0; i < ratios.length; i++) {
+          const r = ratios[i];
+          const targetTime = Math.max(0.1, Math.min(duration * r, duration - 0.1));
+          video.currentTime = targetTime;
+
+          await new Promise((resSeek) => {
+            const onSeeked = () => {
+              video.removeEventListener('seeked', onSeeked);
+              resSeek();
+            };
+            video.addEventListener('seeked', onSeeked);
+          });
+
+          const canvas = document.createElement('canvas');
+          let w = video.videoWidth || 640;
+          let h = video.videoHeight || 360;
+          const maxW = 640, maxH = 360;
+          const scale = Math.min(maxW / w, maxH / h);
+          canvas.width = Math.round(w * scale);
+          canvas.height = Math.round(h * scale);
+
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const b64 = canvas.toDataURL('image/jpeg', 0.85);
+
+          results.push({
+            data: b64,
+            timestamp_sec: Math.round(targetTime * 10) / 10,
+            extracted_ratio: r
+          });
+        }
+        URL.revokeObjectURL(blobUrl);
+        resolve(results);
+      } catch (err) {
+        URL.revokeObjectURL(blobUrl);
+        reject(err);
+      }
+    };
+
+    video.onerror = () => {
+      URL.revokeObjectURL(blobUrl);
+      reject(new Error('비디오 파일을 읽거나 디코딩할 수 없습니다.'));
+    };
+  });
+}
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 window.addEventListener('DOMContentLoaded', () => {
   initProjectSync();
   initMap();
   updateSummaryCard();
   loadHistory();
   updateAuthUI();
+  initYouTubeCaseStudyController();
   // Start First Greeting in Chatbot
   addMessage('안녕하세요! 저는 스카이 커맨드 비행 도우미에요!\n궁금한 점이나 비행 계획 신청서 초안을 만드실 때 등의 목적으로 입력해주세요!');
   askCurrentStep();

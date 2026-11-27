@@ -1,13 +1,6 @@
 from typing import Dict, Any, Optional
 from backend.config import settings
 from backend.external.cache import external_cache
-try:
-    from backend.services.geocoding_service import resolve_location
-except ImportError:
-    try:
-        from services.geocoding_service import resolve_location
-    except ImportError:
-        from geocoding_service import resolve_location
 
 
 class VWorldClient:
@@ -50,6 +43,7 @@ class VWorldClient:
             return cached_copy
 
         # 정밀 위치 해석 파이프라인 호출
+        from backend.services.geocoding_service import resolve_location
         res = resolve_location(clean_query, simulate_offline=simulate_offline)
 
         addr_str = res.get("address") or clean_query

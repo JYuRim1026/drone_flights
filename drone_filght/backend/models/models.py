@@ -611,3 +611,106 @@ class PersonalizedShootingPath(Base):
     project = relationship("ShootingProject", back_populates="personalized_paths")
     user = relationship("User", back_populates="personalized_paths")
     common_path = relationship("ProjectCommonPath")
+
+
+# ==========================================
+# 17. shooting_case_studies — 초기 촬영 사례 마스터 (Phase A-2)
+# ==========================================
+class ShootingCaseStudy(Base):
+    """
+    Phase A-2: 촬영 사례 데이터 마스터
+    - 사전 수집된 자체 촬영(SELF_FILMED) 및 레퍼런스(YOUTUBE_REF, COMMUNITY_FEED) 영상 관리
+    - 실제 센서(GPS) 유무와 AI 분석 상태, 사람의 검증 상태를 엄격히 분리
+    """
+    __tablename__ = "shooting_case_studies"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, index=True)
+    case_code = Column(String(50), unique=True, nullable=False, index=True)
+    title = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+
+    # 출처 구분: SELF_FILMED (자체 촬영), YOUTUBE_REF (유튜브/웹 레퍼런스), COMMUNITY_FEED (기존 커뮤니티 피드 연계)
+    source_type = Column(String(30), nullable=False, default="SELF_FILMED", index=True)
+    video_ref_url = Column(String(500), nullable=True)
+    duration_sec = Column(Float, nullable=True)
+
+    # 촬영 장소 및 위치
+    place_name = Column(String(150), nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+
+    # 연계 외래키 (기존 데이터와의 호환성을 위해 nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    project_id = Column(Integer, ForeignKey("shooting_projects.id", ondelete="SET NULL"), nullable=True, index=True)
+    path_id = Column(Integer, ForeignKey("shooting_paths.path_id", ondelete="SET NULL"), nullable=True, index=True)
+
+    # 기법 정보 (사용자 입력 vs 인간 검증 기법 엄격 분리)
+    declared_technique = Column(String(50), nullable=True)  # 최초 사용자 지정 기법 (불변)
+    verified_technique = Column(String(50), nullable=True)  # 사람이 최종 검증한 대표 촬영 기법 (초기 None)
+
+    # 실제 센서 Ground Truth, 품질 상태 및 시간 동기화
+    has_actual_gps = Column(Boolean, default=False, nullable=False, index=True)
+    is_gps_time_synced = Column(Boolean, default=False, nullable=False)
+    gps_quality_status = Column(String(30), default="UNCHECKED", nullable=False)  # EXCELLENT, ACCEPTABLE, POOR, UNUSABLE, UNCHECKED
+    is_path_usable = Column(Boolean, default=False, nullable=False)  # 경로 생성/학습 투입 가능 여부
+    is_public = Column(Boolean, default=False, nullable=False)  # 공개 여부
+    filming_started_at = Column(DateTime, nullable=True)
+
+    # 상태 관리 및 감사 이력
+    ai_analysis_status = Column(String(30), default="PENDING", nullable=False, index=True)  # PENDING, IN_PROGRESS, COMPLETED, FAILED
+    verification_status = Column(String(30), default="UNVERIFIED", nullable=False, index=True)  # UNVERIFIED, HUMAN_VERIFIED, REJECTED
+    verifier_notes = Column(Text, nullable=True)
+    verification_audit = Column(JSON, default=list, nullable=False)  # 검증 이력 누적 저장
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    # 관계 설정
+    user = relationship("User", foreign_keys=[user_id])
+    project = relationship("ShootingProject", foreign_keys=[project_id])
+    path = relationship("ShootingPath", foreign_keys=[path_id])
+    frames = relationship("CaseStudyFrame", back_populates="case_study", cascade="all, delete-orphan", order_by="CaseStudyFrame.frame_index")
+
+
+# ==========================================
+# 18. case_study_frames — 촬영 사례 개별 프레임 및 AI 분석 상세 (Phase A-2)
+# ==========================================
+class CaseStudyFrame(Base):
+    """
+    Phase A-2: 촬영 사례 영상에서 추출된 개별 프레임 및 AI 비전 분석 결과
+    - 영상 타임스탬프(초 단위)와 GPS 동기화 기준점 제공
+    - Gemini Vision 객체 검출(BBox, 깊이 레이어) 및 추정 기법 저장
+    - AI 추정값과 사람 검증값의 엄격한 분리
+    """
+    __tablename__ = "case_study_frames"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, index=True)
+    case_id = Column(Integer, ForeignKey("shooting_case_studies.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    frame_index = Column(Integer, nullable=False)
+    timestamp_sec = Column(Float, nullable=False)  # 영상 시작 기준 경과 초 (동기화 기준)
+    extracted_ratio = Column(Float, nullable=True)  # 추출 시점 비율 (0.15, 0.50, 0.85 등)
+    storage_path = Column(String(500), nullable=True)
+    file_size_bytes = Column(Integer, nullable=True)
+
+    # AI 비전 추정 결과
+    scene_type = Column(String(50), nullable=True)
+    primary_subject = Column(String(100), nullable=True)
+    subject_bbox = Column(JSON, nullable=True)  # {"x": ..., "y": ..., "w": ..., "h": ...}
+    depth_layers = Column(JSON, nullable=True)  # {"foreground": ..., "midground": ..., "background": ...}
+    composition_type = Column(String(50), nullable=True)  # 삼분할, 중앙 배치, 리딩 라인 등
+    estimated_technique = Column(String(50), nullable=True)  # AI가 추정한 기법 (FORWARD, LATERAL, ORBIT, PANORAMA, DIAGONAL_REVEAL)
+    verified_technique = Column(String(50), nullable=True)  # 프레임 단위 검증 기법 (라벨 용도, nullable=True)
+    confidence_score = Column(Float, nullable=True)  # 0.0 ~ 1.0
+    raw_ai_analysis = Column(JSON, nullable=True)  # Gemini Vision 원본 반환 JSON 전문
+
+    # 모델 및 프롬프트 버전
+    ai_model_version = Column(String(50), default="gemini-3.1-flash-lite", nullable=False)
+    prompt_version = Column(String(30), default="v1.0", nullable=False)
+    is_verified = Column(Boolean, default=False, nullable=False)  # 사람 육안 검증 여부
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # 관계
+    case_study = relationship("ShootingCaseStudy", back_populates="frames")
+

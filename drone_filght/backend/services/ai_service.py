@@ -770,30 +770,49 @@ class AIService:
         project_id: int = 1,
         shooting_number: Optional[int] = 1,
         current_user: Optional[User] = None,
+        user_id: Optional[int] = None,
         save_to_db: bool = True,
-        db: Optional[Session] = None
+        db: Optional[Session] = None,
+        rec_waypoints: Optional[List[Dict[str, Any]]] = None
     ) -> AnalyzeResponse:
         """
-        [Phase 10] AI 기반 실시간 촬영 방향 및 구도 추천 통합 엔진:
+        [Phase 10 & Phase A-6] AI 기반 실시간 촬영 방향 및 구도 추천 통합 엔진:
         1. 4가지 핵심 데이터 통합 (프로젝트 정보, 장소 자료, 경로 동선, 사용자 선호도)
-        2. 실시간 스마트폰 카메라 프레임 분석 (Gemini Vision 시도 -> 실패/부재 시 PIL/NumPy Fallback)
-        3. 촬영 방향 안내(Shooting Guide: 프레임 상하좌우/수평) vs 보행 이동 안내(Walking Guide: GPS 거리/방위각) 엄격 분리
-        4. 초록색 프레임(.live.ready) 활성화 조건: 카메라 구도 및 수평도 일치 시 즉시 활성화 (보행 도달 여부에 종속되지 않음)
-        5. 분석 결과 DB(shooting_analyses) 저장 (분석 로그, 지침문, 4대 데이터 컨텍스트 연계)
+        2. 사용자별 선호도(기법 및 구도) 조회 및 장면 적합성(Feasibility) 종합 평가
+        3. 실시간 스마트폰 카메라 프레임 분석 (Gemini Vision 시도 -> 실패/부재 시 PIL/NumPy Fallback)
+        4. 촬영 방향 안내(Shooting Guide) vs 보행 이동 안내(Walking Guide) 엄격 분리
+        5. 분석 결과 DB 저장 및 개인화 추천 여부(is_personalized) 제공
         """
         # =====================================================================
         # Step 1. 4가지 핵심 데이터 결합 조회 (DB 연동)
         # =====================================================================
+        # Phase A-6: 사용자 고유 식별 (User ID Isolation: current_user.id -> user_id -> project.user_id)
+        effective_user_id = None
+        if current_user and getattr(current_user, "id", None):
+            effective_user_id = current_user.id
+        elif user_id:
+            effective_user_id = user_id
+
         project_data: Dict[str, Any] = {}
         location_asset_data: Dict[str, Any] = {"asset_count": 0, "summary": "사전 등록 자료 없음", "matched_poi_name": None}
         path_data: Dict[str, Any] = {"is_personalized": False, "variation_type": None, "common_version": None, "total_waypoints": 0}
-        user_pref_data: Dict[str, Any] = {"top_technique": None, "top_score": 0.0, "has_preference": False}
-        rec_waypoints: List[Dict[str, Any]] = []
+        user_pref_data: Dict[str, Any] = {
+            "user_id": effective_user_id,
+            "top_technique": None,
+            "top_score": 0.0,
+            "top_composition": None,
+            "top_composition_score": 0.0,
+            "has_preference": False
+        }
+        rec_waypoints = list(rec_waypoints) if rec_waypoints else []
 
         if db and project_id:
             # ① 촬영 프로젝트 정보 (ShootingProject)
             proj = db.query(ShootingProject).filter(ShootingProject.id == project_id).first()
             if proj:
+                if effective_user_id is None and proj.user_id:
+                    effective_user_id = proj.user_id
+                    user_pref_data["user_id"] = effective_user_id
                 project_data = {
                     "id": proj.id,
                     "title": proj.title or proj.project_name or "촬영 프로젝트",
@@ -808,6 +827,8 @@ class AIService:
 
             # ② 촬영 장소 자료 (LocationAsset - 사전 등록된 이미지/영상 피사체 메타데이터 재활용)
             loc_assets = db.query(LocationAsset).filter(LocationAsset.project_id == project_id).all()
+            asset_rec_waypoints = []
+            asset_rec_tech = None
             if loc_assets:
                 matched_poi = None
                 features_list = []
@@ -818,6 +839,10 @@ class AIService:
                         if not matched_poi and t:
                             matched_poi = t
                         features_list.append(f"{a.asset_type}({t})")
+                        p_rec = feat.get("recommended_path")
+                        if isinstance(p_rec, dict) and p_rec.get("waypoints"):
+                            asset_rec_waypoints = p_rec.get("waypoints") or []
+                            asset_rec_tech = p_rec.get("technique")
                 location_asset_data = {
                     "asset_count": len(loc_assets),
                     "summary": ", ".join(features_list[:3]),
@@ -825,58 +850,122 @@ class AIService:
                 }
 
             # ③ 촬영 경로 데이터 (Phase 8 공통 & Phase 9 맞춤 통합 경로)
-            try:
-                from backend.services.path_service import path_service
-                user_id_val = current_user.id if current_user else None
-                path_rec = path_service.get_next_round_recommendation(db=db, project_id=project_id, user_id=user_id_val)
-                rec_waypoints = path_rec.get("recommended_waypoints") or []
-                path_data = {
-                    "is_personalized": path_rec.get("is_personalized", False),
-                    "variation_type": path_rec.get("personalized_variation_type"),
-                    "common_version": path_rec.get("common_path_version"),
-                    "total_waypoints": len(rec_waypoints),
-                    "source_info": path_rec.get("source_info")
-                }
-            except Exception:
-                rec_waypoints = []
-
-            # ④ 사용자 선호도 데이터 (UserPreferenceScore)
-            if current_user:
+            if not rec_waypoints:
                 try:
-                    user_prefs = db.query(UserPreferenceScore).filter(
-                        UserPreferenceScore.user_id == current_user.id,
+                    from backend.services.path_service import path_service
+                    user_id_val = effective_user_id
+                    path_rec = path_service.get_next_round_recommendation(db=db, project_id=project_id, user_id=user_id_val)
+                    rec_waypoints = path_rec.get("recommended_waypoints") or []
+                    if (not rec_waypoints or len(rec_waypoints) <= 1) and asset_rec_waypoints:
+                        rec_waypoints = asset_rec_waypoints
+                    path_data = {
+                        "is_personalized": path_rec.get("is_personalized", False),
+                        "variation_type": path_rec.get("personalized_variation_type"),
+                        "common_version": path_rec.get("common_path_version"),
+                        "total_waypoints": len(rec_waypoints),
+                        "technique": asset_rec_tech or path_rec.get("technique"),
+                        "source_info": path_rec.get("source_info"),
+                        "has_valid_poi": bool(asset_rec_waypoints or (location_asset_data.get("matched_poi_name")))
+                    }
+                except Exception:
+                    rec_waypoints = asset_rec_waypoints or []
+            else:
+                path_data = {
+                    "is_personalized": False,
+                    "variation_type": None,
+                    "common_version": None,
+                    "total_waypoints": len(rec_waypoints),
+                    "technique": "FORWARD",
+                    "source_info": "custom_injected_waypoints",
+                    "has_valid_poi": bool(len(rec_waypoints) > 0)
+                }
+
+            # ④ 사용자 선호도 데이터 조회 (UserPreferenceScore: 기법 및 구도 분리 쿼리)
+            if effective_user_id:
+                try:
+                    user_tech_prefs = db.query(UserPreferenceScore).filter(
+                        UserPreferenceScore.user_id == effective_user_id,
                         UserPreferenceScore.category == "technique"
                     ).order_by(UserPreferenceScore.preference_score.desc()).all()
-                    if user_prefs:
-                        user_pref_data = {
-                            "top_technique": user_prefs[0].preference_value,
-                            "top_score": float(user_prefs[0].preference_score),
-                            "has_preference": True
-                        }
-                except Exception:
-                    pass
+
+                    user_comp_prefs = db.query(UserPreferenceScore).filter(
+                        UserPreferenceScore.user_id == effective_user_id,
+                        UserPreferenceScore.category == "composition"
+                    ).order_by(UserPreferenceScore.preference_score.desc()).all()
+
+                    top_t = user_tech_prefs[0].preference_value if user_tech_prefs else None
+                    top_t_score = float(user_tech_prefs[0].preference_score) if user_tech_prefs else 0.0
+                    top_c = user_comp_prefs[0].preference_value if user_comp_prefs else None
+                    top_c_score = float(user_comp_prefs[0].preference_score) if user_comp_prefs else 0.0
+
+                    has_pref = bool(top_t is not None or top_c is not None)
+                    user_pref_data = {
+                        "user_id": effective_user_id,
+                        "top_technique": top_t,
+                        "top_score": top_t_score,
+                        "top_composition": top_c,
+                        "top_composition_score": top_c_score,
+                        "has_preference": has_pref
+                    }
+                except Exception as ex:
+                    logger.warning(f"[AI SCENE] User preference score query failed: {ex}")
 
         # =====================================================================
-        # Step 2. 보행 이동 안내 (Walking Movement Guide) 순수 기하 수식 계산 및 안전 검증
+        # Step 2. 보행 이동 안내 및 촬영 기법/구도 개인화·장면 적합성 판정 (Phase A-6)
         # =====================================================================
-        # 촬영 기법 식별 (5대 기법 기준: FORWARD, LATERAL, DIAGONAL_REVEAL, ORBIT, PANORAMA)
         from backend.services.technique_service import technique_service
-        raw_tech = str(user_pref_data.get("top_technique") or purpose or "FORWARD").strip()
-        effective_base_tech = technique_service.map_to_base_5(raw_tech)
-        if any(k in raw_tech.lower() for k in ["panorama", "파노라마"]):
-            effective_base_tech = "PANORAMA"
-        elif any(k in raw_tech.lower() for k in ["lateral", "측면"]):
-            effective_base_tech = "LATERAL"
-        elif any(k in raw_tech.lower() for k in ["diagonal", "사선", "reveal", "리빌"]):
-            effective_base_tech = "DIAGONAL_REVEAL"
-        elif any(k in raw_tech.lower() for k in ["orbit", "오빗"]):
-            effective_base_tech = "ORBIT"
-        elif any(k in raw_tech.lower() for k in ["forward", "전진", "dronie"]):
-            effective_base_tech = "FORWARD"
+
+        # 1) 기본(Fallback) 장면 최적 기법 결정
+        fallback_tech = technique_service.map_to_base_5(purpose or "FORWARD")
+        if isinstance(path_data, dict) and path_data.get("technique"):
+            fallback_tech = technique_service.map_to_base_5(str(path_data["technique"]))
+
+        is_personalized = False
+        personalized_reason = None
+        fallback_reason = None
+
+        # 2) 신규 사용자 (선호도 없음 / Cold Start) vs 선호도 보유 사용자 판정
+        if not user_pref_data.get("has_preference"):
+            # 선호도 데이터가 없는 신규 사용자는 기존 추천 방식을 그대로 사용 (Requirement 5)
+            effective_base_tech = fallback_tech
+            is_personalized = False
+            personalized_reason = "신규 사용자 기준 기본 AI 추천 모드로 작동 중입니다."
+        else:
+            # 선호도 보유 사용자: 선호 기법과 현재 장면 적합성 종합 판정 (Requirement 3 & 4)
+            pref_tech_raw = user_pref_data.get("top_technique")
+            pref_comp_raw = user_pref_data.get("top_composition")
+            candidate_tech = technique_service.map_to_base_5(str(pref_tech_raw)) if pref_tech_raw else fallback_tech
+
+            # [장면 적합성 판정 규칙]
+            # (A) ORBIT 적합성: 피사체 실측 GPS 또는 POI 등록 여부 확인
+            is_orbit_cand = (candidate_tech == "ORBIT")
+            has_poi_target = bool(
+                (isinstance(path_data, dict) and path_data.get("has_valid_poi")) or 
+                (location_asset_data.get("asset_count", 0) > 0 and location_asset_data.get("matched_poi_name"))
+            )
+            orbit_blocked = is_orbit_cand and not has_poi_target
+
+            # (B) 장애물 위험성: 전방 고위험 장애물 시 사선 기법 제한
+            is_high_obstacle = (location_asset_data.get("obstacle_level") == "HIGH")
+            diagonal_blocked = (candidate_tech == "DIAGONAL_REVEAL") and is_high_obstacle
+
+            if orbit_blocked:
+                # 선호 기법(ORBIT)이 현재 장면에 적합하지 않음 -> 기존 AI 추천 결과 우선 (Requirement 4)
+                effective_base_tech = fallback_tech
+                is_personalized = False
+                fallback_reason = f"선호 기법(ORBIT)은 피사체 실측 GPS 미등록으로 실행이 불가하여 장면 최적 기법({fallback_tech})을 우선 제공합니다."
+            elif diagonal_blocked:
+                effective_base_tech = fallback_tech
+                is_personalized = False
+                fallback_reason = f"선호 기법(DIAGONAL_REVEAL)은 전방 장애물 위험으로 인해 안전한 기법({fallback_tech})을 우선 제공합니다."
+            else:
+                # 선호 기법이 현재 장면에 적합함 -> 선호 기법 및 선호 구도 반영 (Requirement 2)
+                effective_base_tech = candidate_tech
+                is_personalized = True
+                comp_txt = f" 및 구도({pref_comp_raw})" if pref_comp_raw else ""
+                personalized_reason = f"사용자 맞춤 선호 기법({effective_base_tech}){comp_txt}가 현재 장면에 적합하여 반영되었습니다."
 
         if isinstance(path_data, dict):
-            if path_data.get("technique"):
-                effective_base_tech = str(path_data["technique"]).upper()
             if path_data.get("is_stationary") is True:
                 effective_base_tech = "PANORAMA"
 
@@ -901,6 +990,12 @@ class AIService:
 
         # PANORAMA 전용 분기 (보행 웨이포인트 0개, 제자리 회전 안내만 제공)
         if is_panorama:
+            has_heading_sensor = (current_heading is not None and float(current_heading) >= 0)
+            if not has_heading_sensor:
+                pano_msg = "방향 센서를 사용할 수 없습니다. 뷰파인더의 수평선을 확인하면서 천천히 회전해 주세요."
+            else:
+                pano_msg = "제자리 파노라마/360° 회전 촬영 모드입니다. 보행 이동 없이 제자리에서 천천히 회전하세요."
+
             walking_guide: Dict[str, Any] = {
                 "target_waypoint_seq": 0,
                 "total_waypoints": 0,
@@ -910,14 +1005,15 @@ class AIService:
                 "lateral_status": "ON_TRACK",
                 "technique": "PANORAMA",
                 "is_stationary": True,
-                "bearing_deg": None,
+                "bearing_deg": float(current_heading) if has_heading_sensor else None,
                 "bearing_cardinal": None,
                 "is_waypoint_reached": True,
                 "is_near_waypoint": True,
                 "consecutive_arrival_count": 2,
                 "current_accuracy": current_accuracy,
                 "is_gps_usable": is_gps_usable,
-                "walking_message": "제자리 파노라마/360° 회전 촬영 모드입니다. 보행 이동 없이 제자리에서 천천히 회전하세요.",
+                "has_heading_sensor": has_heading_sensor,
+                "walking_message": pano_msg,
                 "safety_notice": "⚠️ [회전 안전 주의] 제자리 회전 시 발밑 지형과 주변 장애물을 육안으로 확인하세요.",
                 "target_lat": None,
                 "target_lng": None
@@ -1033,15 +1129,46 @@ class AIService:
                     else:
                         lateral_status = "ON_TRACK"
 
-                    # 2.5m 이내 2회 연속 관측 시에만 도착 확정 (Debounce)
-                    is_near = (d_m <= 2.5)
-                    new_consecutive = (consecutive_arrival_count or 0) + 1 if is_near else 0
-                    is_reached = bool(is_near and new_consecutive >= 2)
+                    # 1) 직접 구면 거리 도착 조건 (GPS 정확도 고려한 가변 반경: 3.0m ~ 5.0m)
+                    eff_acc = float(current_accuracy) if (current_accuracy is not None and float(current_accuracy) > 0) else 5.0
+                    arrival_radius = max(3.0, min(5.0, eff_acc * 0.7))
+                    is_near = (d_m <= arrival_radius)
+
+                    # 2) Along-track 진행축 통과 조건 (목표점을 선형상 통과하여 전진 중인지 검사)
+                    # GPS 정확도에 따른 복도 폭과 최대 통과 인정 거리 상한선(Cap) 설정:
+                    # - max_corridor_width: 도심 보행로 폭 및 15m 세그먼트 스케일을 고려하여 최대 6.0m로 캡핑
+                    # - max_pass_dist: 다음 웨이포인트 진입 방지를 위해 세그먼트 절반 수준인 최대 8.0m로 캡핑
+                    max_corridor_width = min(6.0, max(4.0, eff_acc * 0.5))
+                    max_pass_dist = min(8.0, max(6.0, eff_acc * 0.8))
+
+                    # GPS 정확도 신뢰도 기준: eff_acc > 15.0m인 경우 진행축 통과 판정 일시 보류
+                    is_accuracy_reliable_for_along = (eff_acc <= 15.0)
+
+                    is_along_candidate = bool(
+                        prev_wp is not None and
+                        along_rem_m is not None and
+                        along_rem_m <= 0.0 and
+                        abs(cross_m) <= max_corridor_width and
+                        d_m <= max_pass_dist and
+                        is_accuracy_reliable_for_along
+                    )
+
+                    # 연속 관측 판정: 구면 거리 도착(is_near) 또는 진행축 통과(is_along_candidate) 충족 시 카운트 증가
+                    is_progress_condition_met = bool(is_near or is_along_candidate)
+                    new_consecutive = (consecutive_arrival_count or 0) + 1 if is_progress_condition_met else 0
+
+                    # 웨이포인트 도달 확정: 연속 2회 이상 관측 시에만 확정 (GPS 1회 Spike 오승계 원천 차단)
+                    is_reached = bool(is_progress_condition_met and new_consecutive >= 2)
 
                     if is_reached:
-                        w_msg = f"목표 {target_seq}번 지점 반경({d_m:.1f}m) 내 도착 완료! 다음 지점으로 이동하거나 안정된 자세로 촬영하세요."
-                    elif is_near:
-                        w_msg = f"목표 {target_seq}번 지점 반경({d_m:.1f}m) 접근 중... (도착 확인 관측 {new_consecutive}/2회)"
+                        w_msg = f"목표 {target_seq}번 지점 통과/도착 완료! 다음 지점으로 이동하거나 안정된 자세로 촬영하세요."
+                    elif is_near or is_along_candidate:
+                        if is_along_candidate:
+                            w_msg = f"목표 {target_seq}번 지점 선형 통과 중... (통과 확인 관측 {new_consecutive}/2회)"
+                        else:
+                            w_msg = f"목표 {target_seq}번 지점 반경({d_m:.1f}m) 접근 중... (도착 확인 관측 {new_consecutive}/2회)"
+                    elif eff_acc > 15.0 and prev_wp is not None and along_rem_m is not None and along_rem_m <= 0.0:
+                        w_msg = f"GPS 오차 범위(±{eff_acc:.0f}m)로 인해 통과 판정이 일시 보류 중입니다. 목표 지점 근처에서 안정적으로 이동해 주세요."
                     elif lateral_status == "DEVIATED_RIGHT":
                         w_msg = f"경로 우측으로 약 {abs(cross_m):.1f}m 벗어났습니다. 좌측으로 이동하여 추천 경로로 복귀하세요."
                     elif lateral_status == "DEVIATED_LEFT":
@@ -1235,34 +1362,67 @@ class AIService:
             horizon_tilt = cls._safe_float(cv_data.get("horizon_tilt"), 0.0)
             balance_status = "LEFT_HEAVY" if subject_cx < 0.4 else ("RIGHT_HEAVY" if subject_cx > 0.6 else "BALANCED")
 
-            # 촬영 목적 및 선호 기법 반영 목표 구도 결정
-            effective_tech = user_pref_data.get("top_technique") or purpose
-            p_lower = str(effective_tech).lower()
-            if any(k in p_lower for k in ["thirds", "rule_of_thirds", "golden"]):
-                rec_name = "3x3 삼분할 황금비율 구도 (Rule of Thirds)"
-                rec_reason = "피사체와 배경 여백을 1:2 황금비율로 배치하여 시선의 여유와 역동적인 안정감을 극대화합니다."
-                target_x = 0.33 if subject_cx >= 0.5 else -0.33
-                target_y = 0.0
-            elif any(k in p_lower for k in ["dronie", "leading_line", "flyover"]):
-                rec_name = "리딩라인 소실점 구도 (Leading Lines)"
-                rec_reason = "선형 지형의 소실점과 피사체를 직선 보행 경로에 일치시켜 원근감을 부여합니다."
-                target_x = 0.0
-                target_y = 0.20
-            elif any(k in p_lower for k in ["landscape", "horizon", "negative_space"]):
-                rec_name = "수평선 0도 랜드스케이프 구도 (Negative Space)"
-                rec_reason = "수평선을 하단 1/3 지점에 반듯하게 배치하고 상단 하늘 여백을 시원하게 조망하기에 최적입니다."
-                target_x = 0.0
-                target_y = 0.33
-            elif any(k in p_lower for k in ["symmetry", "reflect", "대칭"]):
-                rec_name = "좌우 대칭 밸런스 구도 (Symmetry Framing)"
-                rec_reason = "피사체 좌우 여백의 균형을 정밀하게 맞추어 정갈하고 집중도 높은 시각적 완성도를 제공합니다."
-                target_x = 0.0
-                target_y = 0.0
+            # 촬영 목적 및 선호 기법/구도 반영 목표 구도 결정 (Phase A-6)
+            if is_personalized and user_pref_data.get("top_composition"):
+                pref_c = str(user_pref_data.get("top_composition"))
+                if any(k in pref_c for k in ["thirds", "삼분할", "golden", "황금비율"]):
+                    rec_name = "3x3 삼분할 황금비율 구도 (Rule of Thirds) [맞춤]"
+                    rec_reason = f"사용자 선호 구도({pref_c})를 반영하여 피사체와 배경 여백을 1:2 황금비율로 안정 배치합니다."
+                    target_x = 0.33 if subject_cx >= 0.5 else -0.33
+                    target_y = 0.0
+                elif any(k in pref_c for k in ["center", "중앙"]):
+                    rec_name = "중앙 배치 구도 (Center Framing) [맞춤]"
+                    rec_reason = f"사용자 선호 구도({pref_c})를 반영하여 피사체를 화면 정중앙에 락온합니다."
+                    target_x = 0.0
+                    target_y = 0.0
+                elif any(k in pref_c for k in ["leading", "리딩라인", "소실점"]):
+                    rec_name = "리딩라인 소실점 구도 (Leading Lines) [맞춤]"
+                    rec_reason = f"사용자 선호 구도({pref_c})를 반영하여 소실점과 이동 경로의 원근감을 극대화합니다."
+                    target_x = 0.0
+                    target_y = 0.20
+                elif any(k in pref_c for k in ["landscape", "수평선", "negative"]):
+                    rec_name = "수평선 0도 랜드스케이프 구도 (Negative Space) [맞춤]"
+                    rec_reason = f"사용자 선호 구도({pref_c})를 반영하여 수평선을 안정적으로 조망합니다."
+                    target_x = 0.0
+                    target_y = 0.33
+                elif any(k in pref_c for k in ["symmetry", "대칭"]):
+                    rec_name = "좌우 대칭 밸런스 구도 (Symmetry Framing) [맞춤]"
+                    rec_reason = f"사용자 선호 구도({pref_c})를 반영하여 좌우 대칭 균형을 포착합니다."
+                    target_x = 0.0
+                    target_y = 0.0
+                else:
+                    rec_name = f"{pref_c} [맞춤]"
+                    rec_reason = f"사용자 선호 구도({pref_c})를 반영하여 안내합니다."
+                    target_x = 0.0
+                    target_y = 0.0
             else:
-                rec_name = "중앙 배치 구도 (Center Framing)"
-                rec_reason = "피사체를 화면 정중앙에 락온하여 부드러운 궤적을 왜곡 없이 포착하기 적합합니다."
-                target_x = 0.0
-                target_y = 0.0
+                effective_tech = user_pref_data.get("top_technique") or purpose
+                p_lower = str(effective_tech).lower()
+                if any(k in p_lower for k in ["thirds", "rule_of_thirds", "golden"]):
+                    rec_name = "3x3 삼분할 황금비율 구도 (Rule of Thirds)"
+                    rec_reason = "피사체와 배경 여백을 1:2 황금비율로 배치하여 시선의 여유와 역동적인 안정감을 극대화합니다."
+                    target_x = 0.33 if subject_cx >= 0.5 else -0.33
+                    target_y = 0.0
+                elif any(k in p_lower for k in ["dronie", "leading_line", "flyover"]):
+                    rec_name = "리딩라인 소실점 구도 (Leading Lines)"
+                    rec_reason = "선형 지형의 소실점과 피사체를 직선 보행 경로에 일치시켜 원근감을 부여합니다."
+                    target_x = 0.0
+                    target_y = 0.20
+                elif any(k in p_lower for k in ["landscape", "horizon", "negative_space"]):
+                    rec_name = "수평선 0도 랜드스케이프 구도 (Negative Space)"
+                    rec_reason = "수평선을 하단 1/3 지점에 반듯하게 배치하고 상단 하늘 여백을 시원하게 조망하기에 최적입니다."
+                    target_x = 0.0
+                    target_y = 0.33
+                elif any(k in p_lower for k in ["symmetry", "reflect", "대칭"]):
+                    rec_name = "좌우 대칭 밸런스 구도 (Symmetry Framing)"
+                    rec_reason = "피사체 좌우 여백의 균형을 정밀하게 맞추어 정갈하고 집중도 높은 시각적 완성도를 제공합니다."
+                    target_x = 0.0
+                    target_y = 0.0
+                else:
+                    rec_name = "중앙 배치 구도 (Center Framing)"
+                    rec_reason = "피사체를 화면 정중앙에 락온하여 부드러운 궤적을 왜곡 없이 포착하기 적합합니다."
+                    target_x = 0.0
+                    target_y = 0.0
 
         # =====================================================================
         # Step 4. 촬영 방향 안내 (Shooting Guide) 및 초록색 프레임 판정
@@ -1307,18 +1467,18 @@ class AIService:
             frame_score = max(55, int(90 - dist * 70))
             if abs(offset_x) >= abs(offset_y):
                 if offset_x > 0:
-                    guide_direction = "left"
-                    guide_message = "피사체가 우측으로 치우쳤습니다. 카메라를 ⬅️ 왼쪽으로 천천히 이동하세요."
-                else:
                     guide_direction = "right"
-                    guide_message = "피사체가 좌측으로 치우쳤습니다. 카메라를 ➡️ 오른쪽으로 천천히 이동하세요."
+                    guide_message = "피사체가 화면 우측에 있습니다. 카메라를 ➡️ 오른쪽으로 회전하세요 (우측 패닝)."
+                else:
+                    guide_direction = "left"
+                    guide_message = "피사체가 화면 좌측에 있습니다. 카메라를 ⬅️ 왼쪽으로 회전하세요 (좌측 패닝)."
             else:
                 if offset_y > 0:
                     guide_direction = "down"
-                    guide_message = "피사체가 하단으로 치우쳤습니다. 카메라를 ⬇️ 아래쪽으로 내리세요."
+                    guide_message = "피사체가 화면 하단에 있습니다. 카메라 앵글을 ⬇️ 아래쪽으로 내리세요 (틸트다운)."
                 else:
                     guide_direction = "up"
-                    guide_message = "카메라가 낮거나 피사체가 상단에 있습니다. 카메라를 ⬆️ 위쪽으로 올리세요."
+                    guide_message = "피사체가 화면 상단에 있습니다. 카메라 앵글을 ⬆️ 위쪽으로 올리세요 (틸트업)."
         else:
             # 2순위: dist <= 0.18 (화면 정렬 일치 상태)
             # 피사체 점유율/거리 조정은 의미론적 객체 인식이 확정(Gemini Vision)되고 실제 점유율이 과도할 때만 조건부 조언
@@ -1391,10 +1551,103 @@ class AIService:
             "project_info": project_data,
             "location_asset_info": location_asset_data,
             "path_info": path_data,
-            "user_preference_info": user_pref_data,
+            "user_preference_info": {
+                **user_pref_data,
+                "is_personalized": is_personalized,
+                "personalized_reason": personalized_reason or fallback_reason,
+                "fallback_reason": fallback_reason
+            },
             "is_semantic_recognized": is_semantic_recognized,
             "integrated_at": datetime.utcnow().isoformat()
         }
+
+        # =====================================================================
+        # Step 4.5 [Phase A-4 & A-6] 촬영 사례 기반 실시간 구도 및 기법 추천 연계
+        # =====================================================================
+        reference_case: Optional[Dict[str, Any]] = None
+        recommended_technique = effective_base_tech
+
+        if db:
+            try:
+                from backend.services.case_study_service import case_study_service
+                comp_kw = None
+                if is_personalized and user_pref_data.get("top_composition"):
+                    comp_kw = str(user_pref_data.get("top_composition"))
+                elif "삼분할" in rec_name:
+                    comp_kw = "삼분할"
+                elif "중앙" in rec_name:
+                    comp_kw = "중앙"
+                elif "대칭" in rec_name:
+                    comp_kw = "대칭"
+                elif "리딩라인" in rec_name or "소실점" in rec_name:
+                    comp_kw = "리딩라인"
+                elif "수평선" in rec_name or "네거티브" in rec_name:
+                    comp_kw = "수평선"
+
+                # 유사 촬영 사례 검색 (인간 검증 완료된 HUMAN_VERIFIED 사례만 조회)
+                # 1순위: 구도 유형 일치
+                matched_cases = []
+                if comp_kw:
+                    matched_cases = case_study_service.search_compositions(
+                        db=db,
+                        composition_type=comp_kw,
+                        min_confidence=0.5,
+                        limit=5
+                    )
+
+                # 2순위: 기법 일치
+                if not matched_cases and effective_base_tech:
+                    matched_cases = case_study_service.search_compositions(
+                        db=db,
+                        technique=effective_base_tech,
+                        min_confidence=0.5,
+                        limit=5
+                    )
+
+                # 3순위: 장면 유형 일치
+                if not matched_cases and env_type:
+                    scene_kw = "자연" if any(k in env_type for k in ["자연", "산림", "야외", "우림", "풍경"]) else ("도시" if any(k in env_type for k in ["도심", "스카이라인", "건축"]) else None)
+                    if scene_kw:
+                        matched_cases = case_study_service.search_compositions(
+                            db=db,
+                            scene_type=scene_kw,
+                            min_confidence=0.5,
+                            limit=5
+                        )
+
+                if matched_cases:
+                    best = matched_cases[0]
+                    recommended_technique = effective_base_tech if is_personalized else (best.get("technique") or effective_base_tech)
+                    v_title = best.get("video_title") or "촬영 사례"
+                    ref_note = f"YouTube 레퍼런스 '{v_title}' ({best.get('composition_type')}) 사례를 참고하여 {recommended_technique} 기법으로 연출합니다."
+                    if is_personalized:
+                        ref_note += f" [👤 맞춤 추천 반영]"
+                    reference_case = {
+                        "case_id": best.get("case_id"),
+                        "case_code": best.get("case_code"),
+                        "video_title": v_title,
+                        "source_type": best.get("source_type"),
+                        "video_ref_url": best.get("video_ref_url"),
+                        "frame_id": best.get("frame_id"),
+                        "timestamp_sec": best.get("timestamp_sec"),
+                        "storage_path": best.get("storage_path"),
+                        "thumbnail_url": f"/{best.get('storage_path')}" if best.get("storage_path") else None,
+                        "scene_type": best.get("scene_type"),
+                        "primary_subject": best.get("primary_subject"),
+                        "composition_type": best.get("composition_type"),
+                        "technique": recommended_technique,
+                        "confidence_score": best.get("confidence_score"),
+                        "reference_note": ref_note
+                    }
+                    # 안내 메시지에 참고 사례 연계 정보 추가
+                    short_title = v_title if len(v_title) <= 22 else (v_title[:20] + "...")
+                    pers_tag = " [👤 맞춤]" if is_personalized else ""
+                    guide_message = f"{guide_message} [🎬 참고: {short_title} - {best.get('composition_type')}]{pers_tag}"
+                    if is_ready:
+                        shooting_guide["message"] = f"{shooting_guide.get('message', '')} [🎬 참고: {short_title}]{pers_tag}"
+            except Exception as ref_err:
+                logger.warning(f"[AI SCENE] Reference case study search failed: {ref_err}")
+                reference_case = None
 
         # =====================================================================
         # Step 5. 분석 결과 DB(shooting_analyses) 저장
@@ -1403,7 +1656,7 @@ class AIService:
         if save_to_db and db:
             try:
                 coords_data = {
-                    "user_id": current_user.id if current_user else None,
+                    "user_id": effective_user_id,
                     "shooting_number": shooting_number or 1,
                     "target_x": target_x,
                     "target_y": target_y,
@@ -1416,6 +1669,10 @@ class AIService:
                     "shooting_guide": shooting_guide,
                     "walking_guide": walking_guide,
                     "context_info": context_info,
+                    "reference_case_study": reference_case,
+                    "recommended_technique": recommended_technique,
+                    "is_personalized": is_personalized,
+                    "personalized_reason": personalized_reason or fallback_reason,
                     "subject_details": subject_dict,
                     "environment_details": env_dict,
                     "source": source_label
@@ -1456,11 +1713,15 @@ class AIService:
             is_aligned=is_aligned,
             analysis_id=saved_analysis_id,
             shooting_number=shooting_number or 1,
-            user_id=current_user.id if current_user else None,
+            user_id=effective_user_id,
             source=source_label,
             walking_guide=walking_guide,
             shooting_guide=shooting_guide,
-            context_info=context_info
+            context_info=context_info,
+            reference_case_study=reference_case,
+            recommended_technique=recommended_technique,
+            is_personalized=is_personalized,
+            personalized_reason=personalized_reason or fallback_reason
         )
 
 ai_service = AIService()

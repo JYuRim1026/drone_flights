@@ -263,6 +263,29 @@ class CollaborativePathLearningService:
 
         candidate_paths = candidate_query.order_by(ShootingPath.created_at.asc()).limit(max_paths).all()
 
+        # Phase A-2.3: 촬영 사례(ShootingCaseStudy) 중 Phase 8 게이트(EXCELLENT + HUMAN_VERIFIED)를 통과한 우수 실측 경로도 후보에 병합
+        from backend.models.models import ShootingCaseStudy
+        case_qualified_paths = (
+            db.query(ShootingPath)
+            .join(ShootingCaseStudy, ShootingCaseStudy.path_id == ShootingPath.path_id)
+            .filter(
+                ShootingCaseStudy.project_id == project_id,
+                ShootingCaseStudy.source_type == "SELF_FILMED",
+                ShootingCaseStudy.has_actual_gps == True,
+                ShootingCaseStudy.verification_status == "HUMAN_VERIFIED",
+                ShootingCaseStudy.is_gps_time_synced == True,
+                ShootingCaseStudy.gps_quality_status == "EXCELLENT",
+                ShootingCaseStudy.is_path_usable == True,
+                ShootingPath.is_valid == True,
+                ShootingPath.tracking_source.in_(["PHONE_GPS", "DRONE_GPS"])
+            )
+            .all()
+        )
+        existing_cand_ids = {p.path_id for p in candidate_paths}
+        for cp in case_qualified_paths:
+            if cp.path_id not in existing_cand_ids and cp.path_id not in prev_evaluated_path_ids and cp.path_id not in prev_used_path_ids:
+                candidate_paths.append(cp)
+
         if not candidate_paths:
             if active_common:
                 raise HTTPException(

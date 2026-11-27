@@ -2,13 +2,6 @@ from datetime import date, datetime
 from typing import Dict, Any, Optional
 from backend.config import settings
 from backend.external.cache import external_cache
-try:
-    from backend.services.cinematography_service import calculate_sun_times
-except ImportError:
-    try:
-        from services.cinematography_service import calculate_sun_times
-    except ImportError:
-        from cinematography_service import calculate_sun_times
 
 class AstronomyClient:
     """
@@ -36,6 +29,7 @@ class AstronomyClient:
             cached["cached"] = True
             return cached
 
+        from backend.services.cinematography_service import calculate_sun_times
         sun_data = calculate_sun_times(lat, lon, t_date)
         sunrise_str = sun_data.get("sunrise_str", "06:40")
         sunset_str = sun_data.get("sunset_str", "17:45")
