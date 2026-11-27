@@ -2,9 +2,25 @@ import os
 from typing import List
 from dotenv import load_dotenv
 
-_ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
-load_dotenv(_ENV_PATH, override=False)
-load_dotenv()
+_CURR_DIR = os.path.dirname(os.path.abspath(__file__))
+_CANDIDATE_ENV_PATHS = [
+    os.path.join(_CURR_DIR, ".env"),                                     # drone_filght/backend/.env
+    os.path.join(os.path.dirname(_CURR_DIR), ".env"),                    # drone_filght/.env
+    os.path.join(os.path.dirname(os.path.dirname(_CURR_DIR)), ".env"),   # project root .env
+    os.path.join(os.getcwd(), ".env")                                    # current working directory .env
+]
+
+for _p in _CANDIDATE_ENV_PATHS:
+    if os.path.isfile(_p):
+        load_dotenv(_p, override=False)
+
+# If KMA_API_KEY or GEMINI_API_KEY is empty, reload with override=True to avoid shadowing by empty parent env vars
+if not (os.getenv("KMA_API_KEY") or "").strip() or not (os.getenv("GEMINI_API_KEY") or "").strip():
+    for _p in _CANDIDATE_ENV_PATHS:
+        if os.path.isfile(_p):
+            load_dotenv(_p, override=True)
+            if (os.getenv("KMA_API_KEY") or "").strip() and (os.getenv("GEMINI_API_KEY") or "").strip():
+                break
 
 class Settings:
     PROJECT_NAME: str = "SkyCommand & Nalyeo-Deuryeo Integrated Backend"
@@ -164,7 +180,23 @@ class Settings:
         "KMA_API_ENDPOINT",
         "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0",
     ).rstrip("/")
-    KMA_API_KEY: str = os.getenv("KMA_API_KEY", "")
+    @property
+    def KMA_API_KEY(self) -> str:
+        key = (os.getenv("KMA_API_KEY") or "").strip()
+        if not key:
+            for p in _CANDIDATE_ENV_PATHS:
+                if os.path.isfile(p):
+                    load_dotenv(p, override=True)
+                    key = (os.getenv("KMA_API_KEY") or "").strip()
+                    if key:
+                        break
+        return key
+
+    @KMA_API_KEY.setter
+    def KMA_API_KEY(self, val: str):
+        if val is not None:
+            os.environ["KMA_API_KEY"] = str(val).strip()
+
     VWORLD_API_KEY: str = os.getenv("VWORLD_API_KEY", "")
     
     # External API Timeout & Cache Policies

@@ -61,6 +61,8 @@ class WeatherClient:
     def _resolve_service_key(raw_key: str) -> str:
         cleaned = (raw_key or "").strip()
         if not cleaned:
+            cleaned = (getattr(settings, "KMA_API_KEY", "") or os.getenv("KMA_API_KEY", "")).strip()
+        if not cleaned:
             raise WeatherAPIError("KMA_API_KEY가 .env에 설정되어 있지 않습니다.")
         if "%" in cleaned:
             return urllib.parse.unquote(cleaned)
