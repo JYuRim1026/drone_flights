@@ -1671,10 +1671,10 @@ button { cursor: pointer; }
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid #f1f5f9; padding-bottom:12px; flex-wrap:wrap; gap:10px;">
             <div>
               <div style="font-size:16px; font-weight:800; color:var(--navy); display:flex; align-items:center; gap:8px;">
-                <span>🎬 촬영 프로젝트 작성</span>
+                <span>🎬 촬영 의도 및 조건 분석 (6개 구성 프로젝트 작성)</span>
                 <span style="font-size:11px; background:#eff6ff; color:#1d4ed8; font-weight:700; padding:3px 10px; border-radius:12px;">6대 필수·선택 설정</span>
               </div>
-              <p style="font-size:12px; color:var(--muted); margin:4px 0 0 0;">촬영 장소, 목적, 일정 및 선호 기법을 직관적으로 입력하여 실시간 연동 프로젝트를 생성합니다.</p>
+              <p style="font-size:12px; color:var(--muted); margin:4px 0 0 0;">촬영 장소, 목적, 일정, 시간, 기법, 추가 연출 등 6가지 개별 조건을 직관적으로 입력하여 실시간 연동 프로젝트를 생성합니다.</p>
             </div>
             <div>
               <button type="button" id="btnCreateProjectAction" class="airaxis-btn-primary" style="padding:10px 18px; font-weight:700;">
@@ -3610,12 +3610,15 @@ function renderContextNotices(preset) {
   `;
 }
 
-// 7. Custom Query Analysis Engine (사용자가 직접 검색창에 입력 시)
+// 7. Custom Query Analysis Engine (6개 입력 상자 기반 대시보드 연동)
 async function executeCinemaAnalysis(q) {
-  if (!q) q = $('cinemaQueryInput') ? $('cinemaQueryInput').value.trim() : '';
   if (!q) {
-    toast('촬영 분석을 위한 장소나 조건을 입력해 주세요.');
-    return;
+    const loc = $('projInputLocation')?.value.trim() || '서울 여의도 한강공원';
+    const purp = $('projSelectPurpose')?.value || '자연·풍경 촬영';
+    const activeChip = document.querySelector('.technique-chip.active');
+    const tech = activeChip ? activeChip.dataset.tech : '';
+    const notes = $('projInputNotes')?.value.trim() || '';
+    q = `${loc} ${purp} ${tech} ${notes}`.trim() || '서울 여의도 한강공원 자연·풍경 촬영';
   }
 
   // 코드 프리셋 직접 지정 호출인 경우만 프리셋 선택 (예: 'SHOT-3230')
@@ -6639,6 +6642,7 @@ function initProjectCreationUI() {
           techBadge.style.color = '#1d4ed8';
         }
       }
+      syncCinemaDashboardWith6Inputs();
     });
   });
 
@@ -6660,10 +6664,77 @@ function initProjectCreationUI() {
     });
   }
 
-  // 5. 신규 액션 버튼 이벤트 연결
+  // 5. 6개 입력 상자 실시간 대시보드 동기화 이벤트
+  $('projInputLocation')?.addEventListener('input', () => syncCinemaDashboardWith6Inputs());
+  $('projSelectPurpose')?.addEventListener('change', () => syncCinemaDashboardWith6Inputs());
+  $('projInputDate')?.addEventListener('change', () => syncCinemaDashboardWith6Inputs());
+  $('projInputNotes')?.addEventListener('input', () => syncCinemaDashboardWith6Inputs());
+
+  // 6. 신규 액션 버튼 이벤트 연결
   const btnAction = $('btnCreateProjectAction');
   if (btnAction) {
     btnAction.addEventListener('click', createNewShootingProject);
+  }
+
+  // 초기 6대 설정값으로 하위 대시보드 초기화
+  syncCinemaDashboardWith6Inputs();
+}
+
+function get6InputsData() {
+  const locInput = $('projInputLocation')?.value.trim() || '서울 여의도 한강공원';
+  let purpose = $('projSelectPurpose')?.value || '자연·풍경 촬영';
+  if (purpose === '기타') {
+    purpose = $('projInputPurposeCustom')?.value.trim() || '기타 사용자 지정 목적';
+  }
+  const dateStr = $('projInputDate')?.value || new Date().toISOString().split('T')[0];
+  const startTime = $('projInputStartTime')?.value || '15:00';
+  const endTime = $('projInputEndTime')?.value || '17:00';
+  const targetTime = `${startTime} ~ ${endTime}`;
+  const activeChips = document.querySelectorAll('.technique-chip.active');
+  const desiredTechs = Array.from(activeChips).map(c => c.dataset.tech).filter(Boolean);
+  const preferredTech = desiredTechs.length > 0 ? desiredTechs[0] : null;
+  const additionalNotes = $('projInputNotes')?.value.trim() || '';
+
+  let lat = 37.5284;
+  let lon = 126.9328;
+  if (locInput.includes('경복궁')) { lat = 37.5796; lon = 126.9770; }
+  else if (locInput.includes('해운대')) { lat = 35.1587; lon = 129.1604; }
+  else if (locInput.includes('성산일출봉')) { lat = 33.4584; lon = 126.9425; }
+  else if (locInput.includes('용산')) { lat = 37.5365; lon = 126.9771; }
+
+  return {
+    location: locInput,
+    purpose: purpose,
+    date: dateStr,
+    time: targetTime,
+    preferredTech: preferredTech,
+    desiredTechs: desiredTechs,
+    notes: additionalNotes,
+    lat: lat,
+    lon: lon
+  };
+}
+
+function syncCinemaDashboardWith6Inputs(info) {
+  if (!info) info = get6InputsData();
+  if ($('cinemaFeaturedCode')) $('cinemaFeaturedCode').textContent = info.code || (typeof activeProjectCode !== 'undefined' ? activeProjectCode : 'SHOT 3230');
+  if ($('cinemaSceneBadge')) $('cinemaSceneBadge').textContent = `🎯 ${info.purpose || '자연·풍경 촬영'}`;
+  if ($('cinemaLocDate')) $('cinemaLocDate').textContent = `${info.location} · ${info.date || new Date().toISOString().split('T')[0]}`;
+  
+  const techLabel = info.preferredTech ? `${info.preferredTech} 촬영 기법` : 'AI 추천 맞춤 기법';
+  if ($('cinemaModeBadge')) $('cinemaModeBadge').textContent = `${info.purpose} — ${techLabel}`;
+  if ($('cinemaModeDesc')) {
+    const notesPart = info.notes ? `[연출 메모: ${info.notes}] ` : '';
+    $('cinemaModeDesc').textContent = `${notesPart}${info.location}에서 ${info.purpose}을(를) 위해 최적화된 시네마틱 앵글 및 조종 가이드를 제공합니다.`;
+  }
+  if ($('cinemaReasonTxt')) {
+    const techText = (info.desiredTechs && info.desiredTechs.length > 0) ? info.desiredTechs.join(', ') : '현장 맞춤 추천';
+    $('cinemaReasonTxt').textContent = `입력된 6대 조건 (장소: ${info.location}, 목적: ${info.purpose}, 시간: ${info.time}, 선호기법: ${techText})을 종합 반영한 비행 계획입니다.`;
+  }
+  if ($('cinemaRecTimeTxt')) $('cinemaRecTimeTxt').textContent = `${info.time} · 비행 추천 구간`;
+  
+  if (typeof loadCinemaLiveWeather === 'function' && typeof info.lat === 'number' && typeof info.lon === 'number') {
+    loadCinemaLiveWeather({ lat: info.lat, lon: info.lon, location: info.location });
   }
 }
 
@@ -6754,6 +6825,11 @@ async function createNewShootingProject() {
 
   renderProjectQr(activeProjectCode);
   loadProjectShootingHistory(activeProjectCode);
+
+  // 하위 AI 추천 샷 컨셉 및 대시보드 화면에 6개 입력값 즉시 동기화 반영
+  const inputs = get6InputsData();
+  inputs.code = activeProjectCode;
+  syncCinemaDashboardWith6Inputs(inputs);
 }
 
 async function loadProjectShootingHistory(identifier) {

@@ -14,7 +14,7 @@
     
     // 대상 페이지: 모바일은 mobile.html, PC는 pc.html
     var target = isMobile ? 'mobile.html' : 'pc.html';
-    var query = window.location.search || '';
+    var query = window.location.search ? window.location.search + '&v=2.1' : '?v=2.1';
     var hash = window.location.hash || '';
     
     // iframe 없이 최상위 창에서 네이티브 화면으로 즉시 전환

@@ -817,10 +817,12 @@ class AIService:
                     "id": proj.id,
                     "title": proj.title or proj.project_name or "촬영 프로젝트",
                     "place_name": proj.place_name or proj.shooting_location or "현장",
+                    "shooting_purpose": proj.shooting_purpose or "자연·풍경 촬영",
+                    "target_date": proj.target_date or "일정 미지정",
+                    "target_time": proj.target_time or "주간",
+                    "desired_techniques": proj.desired_techniques or [],
                     "scene_intent": scene_intent or proj.scene_intent or "자연 및 도심 시네마틱 촬영",
                     "recommended_mode": proj.recommended_mode,
-                    "desired_techniques": proj.desired_techniques or [],
-                    "target_time": proj.target_time or "주간"
                 }
                 if not scene_intent:
                     scene_intent = proj.scene_intent
@@ -1208,12 +1210,17 @@ class AIService:
 
         # Google Gemini Multimodal Vision API 시도
         if image_base64 and getattr(settings, "GEMINI_API_KEY", ""):
+            tech_str = ", ".join(project_data.get("desired_techniques", [])) if project_data.get("desired_techniques") else (user_pref_data.get("top_technique") or purpose)
             prompt = f"""
 당신은 항공촬영 및 시네마토그래피 전문 AI 감독입니다.
-현재 촬영 프로젝트 종합 컨텍스트:
-- 프로젝트: {project_data.get('title', '시네마틱 프로젝트')} (장소: {project_data.get('place_name', '현장')})
-- 기획 의도: '{scene_intent or "도시 및 자연 시네마틱 촬영"}'
-- 촬영 목적(기법): '{purpose}' (사용자 최상위 선호 기법: '{user_pref_data.get('top_technique') or purpose}')
+현재 촬영 프로젝트 6대 분석 조건:
+1. 촬영 장소: {project_data.get('place_name', '현장')}
+2. 촬영 목적: {project_data.get('shooting_purpose', '자연·풍경 촬영')}
+3. 촬영 예정일: {project_data.get('target_date', '일정 미지정')}
+4. 촬영 시간대: {project_data.get('target_time', '주간')}
+5. 선호 촬영 기법: {tech_str}
+6. 기타 추가 연출 및 제약: {scene_intent or project_data.get('scene_intent') or '추가 연출 및 제약사항 없음'}
+(프로젝트명: {project_data.get('title', '시네마틱 프로젝트')}, 사용자 최상위 선호 기법: '{user_pref_data.get('top_technique') or purpose}')
 - 사전 등록 장소 특징: {location_asset_data.get('summary', '특징 정보 없음')} (연계 피사체: {location_asset_data.get('matched_poi_name', '일반 피사체')})
 
 스마트폰 후면 카메라에서 캡처된 이 장면을 정밀 분석하여 다음 JSON 스키마로만 엄격히 응답하십시오:

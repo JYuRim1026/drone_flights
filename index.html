@@ -12,7 +12,7 @@
                 || (window.innerWidth <= 768 && window.innerHeight <= 1024);
     
     var target = isMobile ? '/mobile.html' : '/pc.html';
-    var query = window.location.search || '';
+    var query = window.location.search ? window.location.search + '&v=2.1' : '?v=2.1';
     var hash = window.location.hash || '';
     
     window.location.replace(target + query + hash);

@@ -587,19 +587,38 @@ def analyze_location_asset_keyframes(
             detail=f"전송된 대표 프레임의 총 용량({total_kb}KB)이 허용 한도(120KB)를 초과했습니다."
         )
 
-    # 5. Gemini Vision 멀티모달 프롬프트 구성
+    # 5. Gemini Vision 멀티모달 프롬프트 구성 (6개 독립 항목 개별 주입)
     project = db.query(ShootingProject).filter(ShootingProject.id == project_id).first()
     proj_title = (project.title or project.project_name or "촬영 프로젝트") if project else "촬영 프로젝트"
-    proj_place = (project.place_name or project.shooting_location or "촬영 현장") if project else "촬영 현장"
-    effective_intent = req.scene_intent or (project.scene_intent if project else None) or "자연 및 도심 시네마틱 촬영"
+
+    # 6개 촬영 프로젝트 조건 개별 추출
+    c_location = (project.place_name or project.shooting_location or "촬영 현장") if project else "촬영 현장"
+    c_purpose = (project.shooting_purpose or "자연·풍경 촬영") if project else "자연·풍경 촬영"
+    c_date = (project.target_date or "일정 미지정") if project else "일정 미지정"
+    c_time = (project.target_time or "시간 미지정") if project else "시간 미지정"
+
+    desired_list = []
+    if project and project.desired_techniques:
+        if isinstance(project.desired_techniques, list):
+            desired_list = project.desired_techniques
+        elif isinstance(project.desired_techniques, str):
+            desired_list = [project.desired_techniques]
+    c_technique = ", ".join(desired_list) if desired_list else "현장 AI 자동 추천"
+
+    c_notes = (req.scene_intent or (project.scene_intent if project else None) or "추가 연출 및 제약사항 없음")
 
     prompt = f"""당신은 항공촬영 및 시네마토그래피 전문 AI 감독입니다.
-촬영 예정 프로젝트 컨텍스트:
-- 프로젝트: {proj_title} (장소: {proj_place})
-- 기획 의도: {effective_intent}
+촬영 예정 프로젝트 6대 분석 조건:
+1. 촬영 장소: {c_location}
+2. 촬영 목적: {c_purpose}
+3. 촬영 예정일: {c_date}
+4. 촬영 시간: {c_time}
+5. 선호 촬영 기법: {c_technique}
+6. 기타 추가 연출 및 제약: {c_notes}
+(프로젝트명: {proj_title})
 
 현장 참조 영상에서 추출된 대표 프레임 3장(15% 도입부, 50% 중심 장면, 85% 원경/마무리)입니다.
-이 3장의 연속된 공간 정보를 종합 분석하여 최적의 촬영 구도와 추천 기법을 다음 JSON 구조로만 엄격히 응답하십시오:
+이 3장의 연속된 공간 정보와 상기 6대 촬영 조건을 종합 분석하여 최적의 촬영 구도와 추천 기법을 다음 JSON 구조로만 엄격히 응답하십시오:
 {{
   "name": "핵심 피사체/랜드마크 명칭 (예: 한강 철교 주탑, 남산 서울타워 등)",
   "title": "장소 및 랜드마크 요약 명칭 (예: 한강 철교 주탑과 여의도 스카이라인)",
